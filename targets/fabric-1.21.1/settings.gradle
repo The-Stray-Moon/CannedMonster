@@ -1,0 +1,9 @@
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        maven { url = 'https://maven.fabricmc.net/' }
+        mavenCentral()
+    }
+}
+
+rootProject.name = 'CannedMonster-fabric-1.21.1'

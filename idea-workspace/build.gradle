@@ -1,0 +1,38 @@
+plugins {
+    id 'idea'
+}
+
+def mainTarget = providers.gradleProperty('workspace_main_target').orElse('neoforge-1.21.1').get()
+def repositoryRoot = file('..')
+def targetsRoot = file('../targets')
+
+idea.module {
+    contentRoot = repositoryRoot
+    sourceDirs = [] as Set
+    testSourceDirs = [] as Set
+    resourceDirs = [] as Set
+    testResourceDirs = [] as Set
+    excludeDirs += file("../targets/${mainTarget}")
+    excludeDirs += file('../common/src')
+    ['.git', '.tmp', '.codex_tmp', 'node_modules'].each { name ->
+        excludeDirs += new File(repositoryRoot, name)
+    }
+    def projectDirectories = [repositoryRoot, file('../common'), projectDir]
+    projectDirectories.addAll(targetsRoot.listFiles().findAll { it.isDirectory() })
+    projectDirectories.each { directory ->
+        ['build', '.gradle', '.idea', 'run', 'runs', 'out'].each { name ->
+            excludeDirs += new File(directory, name)
+        }
+    }
+}
+
+tasks.register('workspaceInfo') {
+    group = 'IDEA'
+    description = 'Lists the fully imported main target and source-only browsing directories.'
+    doLast {
+        logger.lifecycle("Main target: ${mainTarget}")
+        targetsRoot.listFiles().findAll { it.isDirectory() && it.name != mainTarget }.sort { it.name }.each {
+            logger.lifecycle("Browse only: ${it.name}")
+        }
+    }
+}

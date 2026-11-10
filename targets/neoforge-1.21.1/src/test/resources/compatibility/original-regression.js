@@ -1,0 +1,31 @@
+var F = Java.loadClass('cc.sighs.cannedmonster.fusion.FusionRuntime');
+var ET = Java.loadClass('net.minecraft.world.entity.EntityType');
+var Hand = Java.loadClass('net.minecraft.world.InteractionHand');
+var Effects = Java.loadClass('net.minecraft.world.effect.MobEffects');
+var world = AutoJS.level();
+var player = AutoJS.player();
+var ox = Math.floor(player.getX()), oz = Math.floor(player.getZ());
+AutoJS.command('gamerule doDaylightCycle false');
+AutoJS.command('time set noon');
+AutoJS.command('weather clear');
+AutoJS.command('fill ' + (ox - 8) + ' 219 ' + (oz - 8) + ' ' + (ox + 8) + ' 219 ' + (oz + 8) + ' minecraft:stone');
+AutoJS.command('fill ' + (ox - 8) + ' 220 ' + (oz - 8) + ' ' + (ox + 8) + ' 223 ' + (oz - 8) + ' minecraft:glass');
+AutoJS.command('fill ' + (ox - 8) + ' 220 ' + (oz + 8) + ' ' + (ox + 8) + ' 223 ' + (oz + 8) + ' minecraft:glass');
+AutoJS.command('fill ' + (ox - 8) + ' 220 ' + (oz - 8) + ' ' + (ox - 8) + ' 223 ' + (oz + 8) + ' minecraft:glass');
+AutoJS.command('fill ' + (ox + 8) + ' 220 ' + (oz - 8) + ' ' + (ox + 8) + ' 223 ' + (oz + 8) + ' minecraft:glass');
+AutoJS.tp(player, ox, 220, oz);
+AutoJS.command('execute positioned ' + (ox + 3) + ' 220 ' + oz + ' run fusion spawn minecraft:zombie minecraft:witch');
+AutoJS.command('execute positioned ' + (ox - 3) + ' 220 ' + oz + ' run fusion spawn minecraft:cow minecraft:rabbit');
+var originalWitch = null, originalRabbit = null;
+for (var entity of world.getAllEntities()) {
+    if (entity.getType() === ET.WITCH && F.facets(entity).size() > 0) originalWitch = entity;
+    if (entity.getType() === ET.RABBIT && F.facets(entity).size() > 0) originalRabbit = entity;
+}
+if (!originalWitch || !originalRabbit) throw new Error('Original examples failed to spawn');
+AutoJS.command('gamemode survival @a');
+player.setItemInHand(Hand.MAIN_HAND, AutoJS.stack('minecraft:bucket', 1));
+var originalMilkResult = player.interactOn(originalRabbit, Hand.MAIN_HAND);
+var originalMilk = String(AutoJS.id(player.getItemInHand(Hand.MAIN_HAND)));
+AutoJS.command('gamemode creative @a');
+if (originalMilk !== 'minecraft:milk_bucket') throw new Error('Milk interaction regressed');
+JSON.stringify({milk: originalMilk, interaction: String(originalMilkResult), observeSunResistanceNext: true});

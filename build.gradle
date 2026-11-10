@@ -1,0 +1,88 @@
+def targetsDirectory = file('targets')
+if (!targetsDirectory.isDirectory()) {
+    throw new GradleException("Targets directory not found: ${targetsDirectory}")
+}
+
+def targetBuilds = [:]
+targetsDirectory.listFiles().findAll { it.isDirectory() }.sort { it.name }.each { directory ->
+    def descriptor = new File(directory, 'ci.properties')
+    if (!descriptor.isFile() || !new File(directory, 'gradlew.bat').isFile()) {
+        throw new GradleException("Target '${directory.name}' requires ci.properties and gradlew.bat.")
+    }
+    def properties = [:]
+    descriptor.eachLine('UTF-8') { line ->
+        def entry = line.trim()
+        if (entry && !entry.startsWith('#') && !entry.startsWith(';')) {
+            def separator = entry.indexOf('=')
+            if (separator < 1) {
+                throw new GradleException("Invalid ci.properties entry in ${directory.name}: ${entry}")
+            }
+            def key = entry.substring(0, separator).trim()
+            if (properties.containsKey(key)) {
+                throw new GradleException("Duplicate ci.properties key '${key}' in ${directory.name}")
+            }
+            properties[key] = entry.substring(separator + 1).trim()
+        }
+    }
+    def enabled = properties.get('ci.enabled', 'true').toLowerCase(Locale.ROOT)
+    if (!(enabled in ['true', 'false'])) {
+        throw new GradleException("Target '${directory.name}' has invalid ci.enabled '${enabled}'.")
+    }
+    if (enabled == 'true') {
+        def javaVersion = properties['ci.java']
+        if (javaVersion == null || !(javaVersion ==~ /[1-9][0-9]*/) || !javaVersion.isInteger()) {
+            throw new GradleException("Target '${directory.name}' requires a positive integer ci.java value.")
+        }
+        targetBuilds[directory.name] = [task: "buildTarget-${directory.name}", java: javaVersion.toInteger()]
+    }
+}
+
+def currentJava = JavaVersion.current().majorVersion.toInteger()
+
+def selectedTarget = providers.gradleProperty('target').orNull
+def buildAllTargets = providers.gradleProperty('allTargets').map { it.toBoolean() }.getOrElse(false)
+
+if (selectedTarget != null && !targetBuilds.containsKey(selectedTarget)) {
+    throw new GradleException("Unknown target '${selectedTarget}'. Available targets: ${targetBuilds.keySet().join(', ')}")
+}
+if (selectedTarget != null && buildAllTargets) {
+    throw new GradleException('Choose either -Ptarget=<name> or -PallTargets=true, not both.')
+}
+
+def windows = System.getProperty('os.name').toLowerCase().contains('windows')
+targetBuilds.each { targetName, targetBuild ->
+    tasks.register(targetBuild.task, Exec) {
+        group = 'build'
+        description = "Builds ${targetName} using its own Gradle wrapper."
+        workingDir file("targets/${targetName}")
+        environment 'JAVA_HOME', System.getProperty('java.home')
+        commandLine(windows ? ['cmd', '/c', 'gradlew.bat', 'build', '--console', 'plain', '--no-daemon'] :
+                ['sh', './gradlew', 'build', '--console', 'plain', '--no-daemon'])
+        doFirst {
+            if (JavaVersion.current().majorVersion.toInteger() < targetBuild.java) {
+                throw new GradleException("${targetName} requires JDK ${targetBuild.java} or newer; build it independently with its own wrapper and JDK.")
+            }
+        }
+    }
+}
+
+tasks.register('build') {
+    group = 'build'
+    description = 'Builds common, a discovered target, or all enabled targets whose declared JDK requirement is met.'
+    if (buildAllTargets) {
+        def compatibleTargets = targetBuilds.findAll { name, target -> target.java <= currentJava }
+        if (compatibleTargets.isEmpty()) {
+            throw new GradleException("No enabled targets can be built with JDK ${currentJava}.")
+        }
+        targetBuilds.findAll { name, target -> target.java > currentJava }.each { name, target ->
+            logger.lifecycle("Skipping ${name}: requires JDK ${target.java}, current JDK is ${currentJava}.")
+        }
+        compatibleTargets.each { name, target ->
+            dependsOn tasks.named(target.task)
+        }
+    } else if (selectedTarget != null) {
+        dependsOn tasks.named(targetBuilds[selectedTarget].task)
+    } else {
+        dependsOn gradle.includedBuild('common').task(':build')
+    }
+}

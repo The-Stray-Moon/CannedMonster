@@ -1,0 +1,100 @@
+def autojsVersion = providers.gradleProperty('debug_autojs_version')
+if (!autojsVersion.present) {
+    throw new GradleException("${projectDir.name} must declare debug_autojs_version and debug_rhino in gradle.properties.")
+}
+def rhino = providers.gradleProperty('debug_rhino')
+if (!rhino.present || rhino.get().trim().isEmpty()) {
+    throw new GradleException("${projectDir.name} must declare a Rhino mod coordinate in debug_rhino.")
+}
+
+repositories {
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = 'SighsAutoJS'
+                url = 'https://maven.sighs.cc/repository/maven-releases/'
+            }
+        }
+        filter { includeGroup 'com.sighs.autojs' }
+    }
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = 'LatvianDebug'
+                url = 'https://maven.latvian.dev/releases'
+            }
+        }
+        filter {
+            includeGroup 'dev.latvian.mods'
+            includeGroup 'dev.latvian.apps'
+        }
+    }
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = 'ArchitecturyDebug'
+                url = 'https://maven.architectury.dev/'
+            }
+        }
+        filter { includeGroup 'dev.architectury' }
+    }
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = 'ModrinthDebug'
+                url = 'https://api.modrinth.com/maven'
+            }
+        }
+        filter { includeGroup 'maven.modrinth' }
+    }
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = 'JitPackDebug'
+                url = 'https://jitpack.io'
+            }
+        }
+        filter { includeGroup 'com.github.rtyley' }
+    }
+}
+
+def debugRuntime = configurations.create('hotDebugRuntime') {
+    canBeResolved = true
+    canBeConsumed = false
+}
+def dependencyConfiguration = debugRuntime.name
+if (plugins.hasPlugin('net.neoforged.moddev.legacyforge')) {
+    dependencyConfiguration = obfuscation.createRemappingConfiguration(debugRuntime).name
+    legacyForge.runs.configureEach {
+        additionalRuntimeClasspathConfiguration.extendsFrom(debugRuntime)
+    }
+} else if (plugins.hasPlugin('net.neoforged.moddev')) {
+    configurations.named('runtimeClasspath').configure { extendsFrom(debugRuntime) }
+} else if (configurations.findByName('modLocalRuntime') != null) {
+    dependencyConfiguration = 'modLocalRuntime'
+    debugRuntime.extendsFrom(configurations.getByName(dependencyConfiguration))
+} else {
+    configurations.named('runtimeClasspath').configure { extendsFrom(debugRuntime) }
+}
+
+def coordinates = ["com.sighs.autojs:AutoJS-${projectDir.name}:${autojsVersion.get()}", rhino.get()]
+def kubejs = providers.gradleProperty('debug_kubejs').orNull
+if (kubejs != null && !kubejs.trim().isEmpty()) {
+    coordinates.add(kubejs)
+}
+coordinates.addAll(providers.gradleProperty('debug_support_mods').getOrElse('').split(',').collect { it.trim() }.findAll { it })
+coordinates.each { coordinate ->
+    dependencies.add(dependencyConfiguration, coordinate)
+}
+providers.gradleProperty('debug_libraries').getOrElse('').split(',').collect { it.trim() }.findAll { it }.each { coordinate ->
+    dependencies.add(debugRuntime.name, coordinate)
+}
+
+tasks.register('verifyHotDebug') {
+    group = 'verification'
+    description = 'Resolves the AutoJS hot-debug runtime dependencies without publishing or starting the game.'
+    inputs.files(debugRuntime)
+    doLast {
+        debugRuntime.files.each { logger.lifecycle("Hot debug: ${it.name}") }
+    }
+}

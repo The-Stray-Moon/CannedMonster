@@ -1,0 +1,11 @@
+def workspaceMainTarget = providers.gradleProperty('workspace_main_target').orElse('neoforge-1.21.1').get()
+def targetDirectory = file("../targets/${workspaceMainTarget}")
+if (workspaceMainTarget.contains('/') || workspaceMainTarget.contains('\\') || workspaceMainTarget.contains('..') || !new File(targetDirectory, 'settings.gradle').isFile()) {
+    throw new GradleException("Workspace main target not found: ../targets/${workspaceMainTarget}")
+}
+
+rootProject.name = 'idea-workspace'
+
+includeBuild("../targets/${workspaceMainTarget}") {
+    name = "main-${workspaceMainTarget}"
+}

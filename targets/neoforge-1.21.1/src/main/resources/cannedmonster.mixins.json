@@ -1,0 +1,10 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "cc.sighs.cannedmonster.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": ["MobAccess", "AttributeMapAccess", "MobInteractionMixin", "EntitySaveMixin",
+    "PlayerInteractionMixin", "TargetingIdentityMixin", "ProjectileIdentityMixin", "QueryIdentityMixin",
+    "DamageIdentityMixin", "SpawnInheritanceMixin"],
+  "injectors": { "defaultRequire": 1 }
+}

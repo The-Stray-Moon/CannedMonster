@@ -1,0 +1,10 @@
+{
+  "jars": [
+    {
+      "identifier": { "group": "cc.sighs.cannedmonster", "artifact": "fusion-bootstrap" },
+      "version": { "range": "[0.1.0,0.2.0)", "artifactVersion": "0.1.0" },
+      "path": "META-INF/jarjar/fusion-bootstrap-0.1.0.jar",
+      "isObfuscated": false
+    }
+  ]
+}

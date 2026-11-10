@@ -1,0 +1,5 @@
+rootProject.name = 'CannedMonster'
+
+includeBuild('common') {
+    name = 'common'
+}

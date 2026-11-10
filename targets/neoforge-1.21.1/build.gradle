@@ -1,0 +1,98 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.141'
+    id 'me.modmuss50.mod-publish-plugin' version '2.1.1'
+}
+
+apply from: file('../../gradle/target-conventions/shared.gradle')
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+}
+
+commonJava {
+    // Exclude only common files with confirmed differences for this target.
+}
+
+sourceSets {
+    bootstrap {
+        compileClasspath += sourceSets.main.compileClasspath
+    }
+    test {
+        compileClasspath += sourceSets.bootstrap.output + sourceSets.bootstrap.compileClasspath
+        runtimeClasspath += sourceSets.bootstrap.output + sourceSets.bootstrap.compileClasspath
+    }
+}
+
+def bootstrapJar = tasks.register('bootstrapJar', Jar) {
+    from sourceSets.bootstrap.output
+    archiveFileName = 'fusion-bootstrap-0.1.0.jar'
+    manifest.attributes('FMLModType': 'LIBRARY', 'Automatic-Module-Name': 'cc.sighs.cannedmonster.bootstrap')
+}
+
+tasks.named('processResources', ProcessResources).configure {
+    from(bootstrapJar) { into 'META-INF/jarjar' }
+}
+
+tasks.named('sourcesJar', Jar).configure {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from sourceSets.bootstrap.allSource
+}
+
+neoForge {
+    version = neoforge_121_version
+
+    runs {
+        client {
+            client()
+            gameDirectory = file('run')
+        }
+
+        server {
+            server()
+            programArgument '--nogui'
+        }
+    }
+
+    if (!providers.gradleProperty('verifyPackagedMod').isPresent()) {
+        mods {
+            "${mod_id}" {
+                sourceSet(sourceSets.main)
+            }
+        }
+    }
+}
+
+if (providers.gradleProperty('verifyPackagedMod').isPresent()) {
+    dependencies.add('runtimeOnly', files(tasks.named('jar')))
+    tasks.withType(net.neoforged.moddevgradle.internal.RunGameTask).configureEach {
+        classpathProvider.setFrom(configurations.runtimeClasspath)
+    }
+}
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+}
+
+tasks.named('processResources', ProcessResources).configure {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    def replaceProperties = [
+            minecraft_version     : neoforge_121_minecraft_version,
+            neoforge_version      : neoforge_121_version,
+            neoforge_version_range: neoforge_121_version_range,
+            mod_id                : mod_id,
+            mod_name              : mod_name,
+            mod_license           : mod_license,
+            mod_version           : mod_version,
+            mod_authors           : mod_authors,
+            mod_description       : mod_description
+    ]
+    inputs.properties replaceProperties
+    filesMatching('META-INF/neoforge.mods.toml') {
+        expand replaceProperties + [project: project]
+    }
+}
+
+apply from: file('../../gradle/target-conventions/hot-debug.gradle')
+apply from: file('../../gradle/target-conventions/publish.gradle')
