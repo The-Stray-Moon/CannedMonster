@@ -69,7 +69,8 @@ public final class FusionCoreMod implements ICoreMod {
                     if (INPUT_METHODS.contains(method.name + method.desc)) {
                         collectInputWrites(node.name, method, new HashSet<>());
                     }
-                    if (method.name.equals("isAddedToLevel") && method.desc.equals("()Z")) {
+                    if (method.name.equals("isAddedToLevel") && method.desc.equals("()Z")
+                            || owner.equals(MOB) && (method.name.equals("getLootTable") || method.name.equals("getLootTableSeed"))) {
                         for (AbstractInsnNode instruction : method.instructions) {
                             if (instruction instanceof FieldInsnNode field && field.getOpcode() == Opcodes.GETFIELD) {
                                 localInputs.add(key(declaringOwner(field.owner, field.name, field.desc), field.name, field.desc));

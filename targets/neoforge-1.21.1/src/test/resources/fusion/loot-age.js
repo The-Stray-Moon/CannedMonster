@@ -1,0 +1,18 @@
+var babyBody = mob(ET.COW,20);
+babyBody.setBaby(true);
+var adultMember = mob(ET.SHEEP,20);
+adultMember.setColor(Color.RED);
+F.attach(babyBody, Lists.of(adultMember));
+var babyRow = recordKill(babyBody);
+check(babyRow.items['minecraft:red_wool'] === 1, 'baby body does not suppress adult member loot');
+check(!babyRow.items['minecraft:beef'], 'baby body retains native no-loot rule');
+var adultBody = mob(ET.COW,20);
+var babyMember = mob(ET.SHEEP,20);
+babyMember.setBaby(true);
+F.attach(adultBody, Lists.of(babyMember));
+var adultRow = recordKill(adultBody);
+check(adultRow.items['minecraft:beef'] >= 1, 'adult body keeps loot');
+check(!adultRow.items['minecraft:white_wool'] && !adultRow.items['minecraft:mutton'], 'baby member does not gain adult loot');
+var vanillaRow = recordKill(mob(ET.COW,20));
+check(vanillaRow.items['minecraft:beef'] >= 1, 'unfused body loot unaffected');
+JSON.stringify({passed:checks.length, babyBody:babyRow.items, babyMember:adultRow.items, unfused:vanillaRow.items});

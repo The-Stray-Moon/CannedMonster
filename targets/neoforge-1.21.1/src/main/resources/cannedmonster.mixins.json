@@ -5,6 +5,8 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": ["MobAccess", "AttributeMapAccess", "MobInteractionMixin", "EntitySaveMixin",
     "PlayerInteractionMixin", "TargetingIdentityMixin", "ProjectileIdentityMixin", "QueryIdentityMixin",
-    "DamageIdentityMixin", "SpawnInheritanceMixin"],
+    "DamageIdentityMixin", "SpawnInheritanceMixin", "AppearanceDataAccess",
+    "LivingLootAccess", "FusionLootMixin", "FusionEquipmentLootMixin"],
+  "client": ["AppearanceWalkMixin", "FusionRenderDispatcherMixin", "FusionEntityRendererMixin"],
   "injectors": { "defaultRequire": 1 }
 }

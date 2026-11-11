@@ -138,25 +138,19 @@ docs: clarify release matrix
 
 ## 渲染与客户端变化
 
-渲染改动默认属于 `target-only`，即使视觉效果在多个版本相同。
+渲染实现遵循根 AGENTS.md 的实际 API 差异规则：没有确证版本差异的实现放 `common`，平台注册与 Mixin 配置留在 target；不能只因为引用客户端/loader 类型就另建适配层。确证 buffer、shader、model 或事件时机差异后，再在目标通过 `commonJava` 排除共享文件并提供替代实现。
 
-推荐责任划分：
+当前 NeoForge 1.21.1 的融合切片位于 `common/.../fusion/visual`，target 接入网络注册、客户端 tick 与渲染 Mixin。共享源码位置不代表其他 target 已兼容。客户端显示/渲染类只能在客户端执行路径加载，服务端同步不创建显示实例。
 
-```text
-common/render/
-  RenderInput, RenderPlan, RenderProfile, SharedRenderLogic
+视觉回归使用 target 的 `src/test/resources/visual/`：在专用 `Fusion visual slices verification` 世界执行 `spawn.js`，客户端执行 `assert-client.js`；服务端 `change-state.js` 后客户端执行 `assert-changed.js`。另外检查默认值恢复、停止/重新追踪、资源重载及完整重启后的外观。必须从最终 jar 启动并通过 AutoJS 回读真实状态，同时检查实际画面；几何单元测试不能替代渲染验证。
 
-targets/<name>/.../client/
-  RenderBackend, ClientBootstrap, target-specific RenderHooks
-```
+首版只有高度切片，没有封口或骨骼语义识别。记录第三方渲染路径、实体事件及私有动画尚未覆盖，不能把原版组合成功当作所有模组兼容。不得通过在 `common` 和 target 中创建同名 class 来“覆盖”实现。
 
-当只有 Forge 1.20.1 需要微调时：
+## 融合属性与掉落回归
 
-- 参数不同：Forge target 提供自己的 profile。
-- 多一两步：Forge target 提供 hook；其余 target 使用 no-op hook。
-- buffer、shader、model、事件时机不同：Forge target 替换自己的 backend 或 bootstrap。
+NeoForge 1.21.1 的 `src/test/resources/fusion/` 脚本在新建的 `Fusion attributes loot verification` 世界、AutoJS server side 执行。顺序为 `attributes-loot.js`、`loot-edges.js`、`loot-age.js`；保存并完整退出 JVM，重新从最终 jar 启动同一世界后执行 `attribute-persistence.js`。主脚本会清理该测试区域掉落物及上轮带测试标记的实体，不在玩家世界执行。
 
-不得通过在 `common` 和 target 中创建同名 class 来“覆盖”实现。客户端类不得被服务端入口或 `common` 直接加载。
+检查连续融合与组合展平的等权平均、缺失属性、基础值与临时修改器、最大血量截断、默认掉落表与自定义表隔离、私有库存、重复物种、公共事件仅一次及取消后的真实世界物品数量、幼体条件。持久化脚本在重启后继续加入新成员，不能只检查重启前后的当前平均值；必须证明原始权重仍正确。新增 v2 的 AttributeOrigins 不代表能从 v1 旧存档恢复已经丢失的原始个体值。
 
 ## 验证矩阵
 

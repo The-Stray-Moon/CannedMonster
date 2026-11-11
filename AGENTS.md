@@ -27,9 +27,15 @@
 
 - 当前只开发 NeoForge 1.21.1；其他 target 是初始化后的模板，不代表已经移植融合功能。共享 MC 代码目前只在该 target 验证。
 - `common` 的 `fusion` 包保存原生实例调度与身体绑定；不得添加按实体 ID 分支的特性配方。
+- AttributeAverages 对各成员首次参与融合时的 attribute 基础值取算术平均，缺失属性不作为零；后置身体动态修改器保持一次，不合并前置临时药水/装备修改器。版本 2 融合 NBT 保存有序 AttributeOrigins，prepend 展平按原始个体等权计算，不能平均已有平均值。最大生命值下降时只截断当前血量，不自动回血。版本 1 缺少原始快照，只能以旧存档中可恢复值迁移，不能声称还原已丢失的个体属性。
+- FusionLoot 在同一次身体 dropAllDeathLoot 内按序分派成员的 dropFromLootTable、dropCustomDeathLoot 和 dropEquipment；shouldDropLoot 按成员检查，doMobLoot 沿用引擎，公共 LivingDropsEvent 只收尾一次，取消阻止整批正常捕获的物品生成。Mob 的公共装备概率逻辑只对身体执行；成员私有库存继续走原生 dropEquipment。经验不合并，不能递归调用各成员 die/dropAllDeathLoot 来制造重复事件。
+- 战利品描述状态按 Mob.getLootTable/getLootTableSeed 的直接字段读集合保留成员私有（不是物种白名单），确保自定义表及 seed 不串用。绕过上述入口的模组自定义死亡/世界直接生成副作用不保证被捕获；特殊回调复制共享物品而不清空的未知模组仍不具备通用事务去重。
 - NeoForge 1.21.1 的 `src/bootstrap` 通过 `ICoreMod` 扫描类并重定向身体字段，作为嵌套 LIBRARY jar 加载。开发运行不得再把同一个 bootstrap jar 加进额外运行类路径，否则会发生模块重名。
 - `runClient -PverifyPackagedMod` 禁用源码模组并从构建 jar 加载，使用 ModDev 的 `RunGameTask.classpathProvider` 排除开发输出。不能只修改 JavaExec.classpath，任务执行时会再次追加 provider，造成重复包与 Mixin 类不可见。该验证入口依赖当前固定的 ModDev 版本，升级插件需重新核对。
-- 后置成员是唯一入世界的身体、主要运动执行者和当前客户端外观；前置成员保留真实类型和独立物种状态。当前尚不承诺完整伤害回调合成、世界身份映射、物种数据客户端同步或任意重写 tick 的兼容性。
+- 后置成员是唯一入世界的身体和主要运动执行者；前置成员保留真实类型和独立物种状态。客户端已接入按序的高度切片组合，不改变碰撞箱。当前尚不承诺完整伤害回调合成、世界身份映射、任意模组私有动画同步或任意重写 tick 的兼容性。
+- `common/.../fusion/visual` 保存显示实例、同步载荷与几何裁剪。追踪开始及每 2 个身体 tick 发送各成员完整 SynchedEntityData 快照（包含默认值，不消耗 dirty 标志）；成员使用会话 UUID，身体同时校验网络 ID 与 UUID。显示实例不入世界、不绑定服务端调度、不执行 tick/AI；运动姿态与装备来自身体。
+- 视觉成员按原顺序从上到下占等高区域，按身体宽高归一化，复用原生 renderer 和材质。SliceBuffers 捕获标准 MultiBufferSource 的 QUADS/TRIANGLES，在身体原点空间裁剪并插值 UV/颜色/光照/法线；禁止改成逐顶点丢弃。名字/拴绳、阴影/火焰只走身体公共入口。不可修改全局共享模型的可见部件。
+- 首版不封闭切口、不识别解剖部位；外形可能有接缝/拉伸。非 QUADS/TRIANGLES 输出会警告并省略；绕过缓冲接口的渲染、模组私有包、实体事件动画、依赖成员自身 tick 的动画未覆盖。渲染剔除采用身体尺寸外扩的保守包围盒，不保证任意超大特效。网络/逐帧几何分配尚未做大规模性能验证。
 - 不再维护身体字段名白名单：引擎三层实例字段默认归身体，AI/身份描述对象按类型保留成员私有，运动输入与登记标志按引擎方法访问集合推导。子类字段默认私有；这不是任意模组状态的语义推断。
 - Entity/SynchedEntityData 注入 BoundObject 槽，字段读写走实例绑定快路径；禁止重新引入每次字段访问的全局同步查表或统一删除 final。
 - OrderedCalls 在 tick/aiStep 的真实 super 边界续接成员，身体公共执行一次并反向返回后置代码。禁止从事件外部固定补调三个生命周期方法、按整个 tick 的方法名去重或执行后恢复速度。运动排他权在公共执行入口实施。
@@ -46,7 +52,7 @@
 - 派生只保留原生新子体的状态并替换来源成员；其他成员按类型重新创建，不复制父体 NBT、装备、库存、变种和个体记忆。这是有意的保守规则，组成与顺序保留但个体状态不承诺继承。正常存档加载不受此规则影响。
 - `public-interaction.js` 验证4次玩家动作仅4次公共事件/经验副作用，覆盖 PASS、染色、取消和剪毛；`no-resource-copy.js` 验证携12钻石的父体不向多个新身体复制主手物品。
 - `assert-regression.js` 校验矩阵及四类失败场景；`derived-regression.js` / `assert-derived.js` 验证二次分裂，`verify-derived-persistence.js` 验证重启后的两个派生体。清理测试尸体前检查 isRemoved，避免原版 Slime.remove 对已死亡实体重复调用产生额外普通子体。
-- 当前只修复 remove 调用链，并非所有 hurt/die 回调、所有第三方事件或客户端类型视图；外部按原始 Java 引用比较/强转仍不保证融合透明。
+- 当前已接管 remove 调用链与公共死亡掉落流程内的三个掉落入口，并非所有 hurt/die 回调、所有第三方事件或客户端类型视图；外部按原始 Java 引用比较/强转仍不保证融合透明。
 - 监守者原生对照也在初始化后的 dig 活动移除，不能单凭消失归因于融合。完整重启的 8 个代表性组合（村民、悦灵、守卫者、青蛙与牛正反）恢复通过；未覆盖实际第三方生物模组。
 
 ## 架构与修改边界

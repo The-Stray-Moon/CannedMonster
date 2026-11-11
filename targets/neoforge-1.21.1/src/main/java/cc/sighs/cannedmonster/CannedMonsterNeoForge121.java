@@ -24,6 +24,14 @@ public final class CannedMonsterNeoForge121 {
 
     public CannedMonsterNeoForge121(net.neoforged.bus.api.IEventBus modBus) {
         CanRegistration.register(modBus);
+        modBus.addListener((net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent event) ->
+                event.registrar("1").playToClient(cc.sighs.cannedmonster.fusion.visual.FusionAppearance.TYPE,
+                        cc.sighs.cannedmonster.fusion.visual.FusionAppearance.CODEC,
+                        (packet, context) -> cc.sighs.cannedmonster.fusion.visual.ClientAppearance.receive(packet)));
+        NeoForge.EVENT_BUS.addListener(cc.sighs.cannedmonster.fusion.visual.AppearanceSync::tick);
+        NeoForge.EVENT_BUS.addListener(cc.sighs.cannedmonster.fusion.visual.AppearanceSync::tracking);
+        NeoForge.EVENT_BUS.addListener(cc.sighs.cannedmonster.fusion.visual.AppearanceSync::leave);
+        NeoForge.EVENT_BUS.addListener(cc.sighs.cannedmonster.fusion.visual.AppearanceSync::stop);
         NeoForge.EVENT_BUS.addListener(this::canInteraction);
         FusionRuntime.initialize();
         NeoForge.EVENT_BUS.addListener(this::registerCommands);
