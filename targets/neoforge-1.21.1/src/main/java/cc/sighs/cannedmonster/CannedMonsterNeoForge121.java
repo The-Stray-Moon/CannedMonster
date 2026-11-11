@@ -22,11 +22,26 @@ public final class CannedMonsterNeoForge121 {
     public static final String MOD_ID = "cannedmonster";
     private static final DynamicCommandExceptionType ERROR = new DynamicCommandExceptionType(message -> Component.literal(String.valueOf(message)));
 
-    public CannedMonsterNeoForge121() {
+    public CannedMonsterNeoForge121(net.neoforged.bus.api.IEventBus modBus) {
+        CanRegistration.register(modBus);
+        NeoForge.EVENT_BUS.addListener(this::canInteraction);
         FusionRuntime.initialize();
         NeoForge.EVENT_BUS.addListener(this::registerCommands);
         NeoForge.EVENT_BUS.addListener(this::leave);
         NeoForge.EVENT_BUS.addListener(this::stop);
+    }
+
+    private void canInteraction(net.neoforged.neoforge.event.entity.player.PlayerInteractEvent.EntityInteract event) {
+        if (!(event.getItemStack().getItem() instanceof cc.sighs.cannedmonster.can.MonsterCanItem can)) return;
+        if (event.getEntity().isSpectator()) return;
+        net.minecraft.world.InteractionResult result = net.minecraft.world.InteractionResult.PASS;
+        if (!can.throwable() && can.storesMobs()) {
+            result = event.getTarget() instanceof net.minecraft.world.entity.LivingEntity living
+                    ? can.interactLivingEntity(event.getItemStack(), event.getEntity(), living, event.getHand())
+                    : net.minecraft.world.InteractionResult.FAIL;
+        }
+        event.setCancellationResult(result);
+        event.setCanceled(true);
     }
 
     private void leave(EntityLeaveLevelEvent event) {

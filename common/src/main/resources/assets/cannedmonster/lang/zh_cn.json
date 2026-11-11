@@ -1,0 +1,22 @@
+{
+  "mod.cannedmonster.name": "怪物罐头",
+  "item.cannedmonster.iron_can": "铁罐头",
+  "item.cannedmonster.monster_can": "怪物罐头",
+  "item.cannedmonster.throwable_monster_can": "投掷型怪物罐头",
+  "item.cannedmonster.large_iron_can": "铁大罐头",
+  "item.cannedmonster.large_monster_can": "怪物大罐头",
+  "item.cannedmonster.throwable_large_monster_can": "投掷型怪物大罐头",
+  "item.cannedmonster.spatial_monster_can": "空间型怪物罐头",
+  "item.cannedmonster.random_monster_can": "随机型怪物罐头",
+  "entity.cannedmonster.thrown_can": "投掷的怪物罐头",
+  "tooltip.cannedmonster.empty": "空罐头",
+  "tooltip.cannedmonster.contains": "已储存：%s",
+  "tooltip.cannedmonster.small": "可以融合，但不能捕捉融合生物",
+  "tooltip.cannedmonster.large": "可以捕捉和储存融合生物",
+  "tooltip.cannedmonster.hand": "右键生物捕捉/融合；右键方块释放",
+  "tooltip.cannedmonster.throw": "长按右键蓄力，松开投掷；落地可拾回",
+  "tooltip.cannedmonster.random": "击中方块后随机生成生物，成功后消耗",
+  "tooltip.cannedmonster.spatial_pending": "空间型功能暂未实现",
+  "message.cannedmonster.large_required": "融合生物需要怪物大罐头",
+  "message.cannedmonster.failed": "罐头操作失败，内容已保留"
+}

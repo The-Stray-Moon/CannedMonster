@@ -89,6 +89,28 @@ public final class FusionRuntime {
         }
     }
 
+    public static void prepend(Mob host, Mob incoming) {
+        if (host == incoming || host.level() != incoming.level() || incoming.isAddedToLevel()
+                || BodyLinks.isFacet(host) || BodyLinks.isFacet(incoming) || !host.isAlive() || !incoming.isAlive()) {
+            throw new IllegalArgumentException("Fusion requires a live body and an independent incoming mob");
+        }
+        List<Mob> previous = List.copyOf(facets(host));
+        List<Mob> incomingMembers = List.copyOf(facets(incoming));
+        List<Mob> combined = new ArrayList<>(incomingMembers);
+        combined.add(incoming);
+        combined.addAll(previous);
+        detach(incoming);
+        detach(host);
+        try {
+            attach(host, combined);
+        } catch (RuntimeException failure) {
+            detach(host);
+            if (!previous.isEmpty()) attach(host, previous);
+            if (!incomingMembers.isEmpty()) attach(incoming, incomingMembers);
+            throw failure;
+        }
+    }
+
     public static List<Mob> facets(Mob host) {
         return SESSIONS.getOrDefault(host, List.of());
     }

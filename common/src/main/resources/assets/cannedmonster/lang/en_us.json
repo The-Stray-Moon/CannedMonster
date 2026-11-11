@@ -1,3 +1,22 @@
 {
-  "mod.cannedmonster.name": "CannedMonster"
+  "mod.cannedmonster.name": "CannedMonster",
+  "item.cannedmonster.iron_can": "Iron Can",
+  "item.cannedmonster.monster_can": "Monster Can",
+  "item.cannedmonster.throwable_monster_can": "Throwable Monster Can",
+  "item.cannedmonster.large_iron_can": "Large Iron Can",
+  "item.cannedmonster.large_monster_can": "Large Monster Can",
+  "item.cannedmonster.throwable_large_monster_can": "Throwable Large Monster Can",
+  "item.cannedmonster.spatial_monster_can": "Spatial Monster Can",
+  "item.cannedmonster.random_monster_can": "Random Monster Can",
+  "entity.cannedmonster.thrown_can": "Thrown Monster Can",
+  "tooltip.cannedmonster.empty": "Empty can",
+  "tooltip.cannedmonster.contains": "Stored: %s",
+  "tooltip.cannedmonster.small": "Can fuse mobs, but cannot capture fused mobs",
+  "tooltip.cannedmonster.large": "Can capture and store fused mobs",
+  "tooltip.cannedmonster.hand": "Use on a mob to capture/fuse; use on a block to release",
+  "tooltip.cannedmonster.throw": "Hold use to charge, release to throw; pick up after landing",
+  "tooltip.cannedmonster.random": "Spawns a random mob on block impact; consumed on success",
+  "tooltip.cannedmonster.spatial_pending": "Spatial behavior is not implemented yet",
+  "message.cannedmonster.large_required": "Fused mobs require a large monster can",
+  "message.cannedmonster.failed": "Can operation failed; contents retained"
 }
