@@ -81,12 +81,14 @@ public final class FusionRuntime {
             }
             SESSIONS.put(host, List.copyOf(facets));
             ATTRIBUTE_ORIGINS.put(host, List.copyOf(origins));
+            BodyLinks.session(host, new FusionMotion(host, facets));
             OrderedCalls.bind(host, facets, FusionRuntime::aiBoundary);
             host.setPersistenceRequired();
         } catch (RuntimeException exception) {
             OrderedCalls.unbind(host);
             SESSIONS.remove(host);
             ATTRIBUTE_ORIGINS.remove(host);
+            BodyLinks.session(host, null);
             bound.forEach(facet -> BodyLinks.unbind(facet, facet.getEntityData()));
             throw exception;
         }
@@ -206,6 +208,7 @@ public final class FusionRuntime {
     public static void detach(Mob host) {
         ATTRIBUTE_ORIGINS.remove(host);
         OrderedCalls.unbind(host);
+        BodyLinks.session(host, null);
         List<Mob> facets = SESSIONS.remove(host);
         if (facets != null) {
             facets.forEach(facet -> BodyLinks.unbind(facet, facet.getEntityData()));
@@ -218,5 +221,6 @@ public final class FusionRuntime {
             hosts = List.copyOf(SESSIONS.keySet());
         }
         hosts.forEach(FusionRuntime::detach);
+        RidingState.clear();
     }
 }

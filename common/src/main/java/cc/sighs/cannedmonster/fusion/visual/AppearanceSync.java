@@ -1,5 +1,6 @@
 package cc.sighs.cannedmonster.fusion.visual;
 
+import cc.sighs.cannedmonster.fusion.FusionMotion;
 import cc.sighs.cannedmonster.fusion.FusionRuntime;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerPlayer;
@@ -43,7 +44,7 @@ public final class AppearanceSync {
         List<Mob> facets = FusionRuntime.facets(body);
         if (facets.isEmpty()) {
             COMPOSITIONS.remove(body);
-            return new FusionAppearance(body.getId(), body.getUUID(), List.of());
+            return new FusionAppearance(body.getId(), body.getUUID(), -1, List.of());
         }
         Composition composition = COMPOSITIONS.get(body);
         if (composition == null || !composition.members.equals(facets)) {
@@ -57,7 +58,7 @@ public final class AppearanceSync {
             for (var item : ((AppearanceData) facet.getEntityData()).cannedmonster$items()) values.add(value(facet, item));
             members.add(new FusionAppearance.Member(composition.ids.get(i), BuiltInRegistries.ENTITY_TYPE.getKey(facet.getType()), List.copyOf(values)));
         }
-        return new FusionAppearance(body.getId(), body.getUUID(), List.copyOf(members));
+        return new FusionAppearance(body.getId(), body.getUUID(), FusionMotion.controlIndex(body), List.copyOf(members));
     }
 
     private static <T> net.minecraft.network.syncher.SynchedEntityData.DataValue<T> value(

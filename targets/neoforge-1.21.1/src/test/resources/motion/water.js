@@ -1,0 +1,21 @@
+motionPlayer.stopRiding();
+if(!rideRow.body.isRemoved()) rideRow.body.discard();
+AutoJS.command('fill -5 199 -20 5 199 25 minecraft:stone');
+AutoJS.command('fill -5 200 -20 5 200 25 minecraft:water');
+AutoJS.tp(motionPlayer,0,201,-10);
+rideRow=motionSpawn('squid -> pig shallow water ride', ET.SQUID, ET.PIG,0,200,-10);
+rideRow.member.setAirSupply(6000);
+motionPlayer.setItemInHand(Hand.MAIN_HAND,AutoJS.stack('minecraft:saddle',1));
+var waterSaddle=motionPlayer.interactOn(rideRow.body,Hand.MAIN_HAND);
+motionPlayer.setItemInHand(Hand.MAIN_HAND,AutoJS.stack('minecraft:carrot_on_a_stick',1));
+var waterMount=motionPlayer.interactOn(rideRow.body,Hand.MAIN_HAND);
+var waterElapsed=0;
+var waterSamples=[];
+var waterGeneration=motionGeneration;
+ServerEvents.tick(function(event){
+ if(waterGeneration!==motionGeneration || waterElapsed>=80) return;
+ waterElapsed++;
+ if(waterElapsed%10===0) waterSamples.push(rideSnapshot());
+ if(waterElapsed===80) motionPlayer.setItemInHand(Hand.MAIN_HAND,AutoJS.stack('minecraft:air',1));
+});
+JSON.stringify({saddle:String(waterSaddle),mount:String(waterMount),initial:rideSnapshot()});

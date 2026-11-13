@@ -14,7 +14,7 @@ public final class ClientAppearance {
     private static long clock;
 
     private record Member(UUID id, Mob entity) {}
-    private record View(int entityId, List<Member> members, long received) {}
+    private record View(int entityId, List<Member> members, int control, long received) {}
 
     private ClientAppearance() {}
 
@@ -39,7 +39,14 @@ public final class ClientAppearance {
             entity.getEntityData().assignValues(member.data());
             members.add(new Member(member.id(), entity));
         }
-        VIEWS.put(packet.bodyId(), new View(packet.entityId(), List.copyOf(members), clock));
+        VIEWS.put(packet.bodyId(), new View(packet.entityId(), List.copyOf(members),
+                packet.control() >= 0 && packet.control() < members.size() ? packet.control() : -1, clock));
+    }
+
+    public static int controlIndex(Mob body) {
+        checkLevel();
+        View view = VIEWS.get(body.getUUID());
+        return view == null || view.entityId != body.getId() ? -1 : view.control();
     }
 
     public static void tick() {

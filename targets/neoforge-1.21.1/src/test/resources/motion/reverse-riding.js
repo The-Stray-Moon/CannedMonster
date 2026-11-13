@@ -1,0 +1,20 @@
+var waterLast=waterSamples[waterSamples.length-1];
+if(waterLast.ticks!==80 || !waterLast.water || !waterLast.vehicleBody || !waterLast.controllerPlayer || waterLast.z < -7) throw new Error('Pig body water riding failed');
+motionPlayer.stopRiding();
+if(!rideRow.body.isRemoved()) rideRow.body.discard();
+AutoJS.tp(motionPlayer,0,201,-10);
+rideRow=motionSpawn('pig -> squid shallow water ride', ET.PIG,ET.SQUID,0,200,-10);
+motionPlayer.setItemInHand(Hand.MAIN_HAND,AutoJS.stack('minecraft:saddle',1));
+var reverseSaddle=motionPlayer.interactOn(rideRow.body,Hand.MAIN_HAND);
+motionPlayer.setItemInHand(Hand.MAIN_HAND,AutoJS.stack('minecraft:carrot_on_a_stick',1));
+var reverseMount=motionPlayer.interactOn(rideRow.body,Hand.MAIN_HAND);
+var reverseElapsed=0;
+var reverseSamples=[];
+var reverseGeneration=motionGeneration;
+ServerEvents.tick(function(event){
+ if(reverseGeneration!==motionGeneration || reverseElapsed>=80) return;
+ reverseElapsed++;
+ if(reverseElapsed%10===0) reverseSamples.push(rideSnapshot());
+ if(reverseElapsed===80) motionPlayer.setItemInHand(Hand.MAIN_HAND,AutoJS.stack('minecraft:air',1));
+});
+JSON.stringify({water:waterLast,saddle:String(reverseSaddle),mount:String(reverseMount),initial:rideSnapshot()});

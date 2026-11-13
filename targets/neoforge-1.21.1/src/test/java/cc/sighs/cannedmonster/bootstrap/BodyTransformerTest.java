@@ -15,6 +15,7 @@ class BodyTransformerTest {
     private static final String ENTITY = "net/minecraft/world/entity/Entity";
     private static final String LIVING = "net/minecraft/world/entity/LivingEntity";
     private static final String MOB = "net/minecraft/world/entity/Mob";
+    private static final String NAVIGATION = "net/minecraft/world/entity/ai/navigation/PathNavigation";
     private static final String SPECIES = "example/mod/UnknownSpecies";
 
     @Test
@@ -189,6 +190,118 @@ class BodyTransformerTest {
             new FusionCoreMod.BodyTransformer(index).transform(index.get(SPECIES), null);
             assertEquals(0, declaration.instructions.size());
         }
+    }
+
+    @Test
+    void installsNavigationRidingAndVelocityIsolationHooks() {
+        Map<String, ClassNode> index = fixture();
+        ClassNode entity = index.get(ENTITY);
+        entity.fields.add(new FieldNode(Opcodes.ACC_PRIVATE, "deltaMovement", "Lnet/minecraft/world/phys/Vec3;", null, null));
+        MethodNode setMotion = new MethodNode(Opcodes.ACC_PUBLIC, "setDeltaMovement",
+                "(Lnet/minecraft/world/phys/Vec3;)V", null, null);
+        setMotion.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        setMotion.instructions.add(new VarInsnNode(Opcodes.ALOAD, 1));
+        setMotion.instructions.add(new FieldInsnNode(Opcodes.PUTFIELD, ENTITY, "deltaMovement", "Lnet/minecraft/world/phys/Vec3;"));
+        setMotion.instructions.add(new InsnNode(Opcodes.RETURN));
+        entity.methods.add(setMotion);
+        MethodNode startRiding = new MethodNode(Opcodes.ACC_PUBLIC, "startRiding",
+                "(Lnet/minecraft/world/entity/Entity;Z)Z", null, null);
+        startRiding.instructions.add(new InsnNode(Opcodes.ICONST_1));
+        startRiding.instructions.add(new InsnNode(Opcodes.IRETURN));
+        entity.methods.add(startRiding);
+
+        ClassNode mob = index.get(MOB);
+        mob.fields.add(new FieldNode(Opcodes.ACC_PRIVATE, "navigation",
+                "Lnet/minecraft/world/entity/ai/navigation/PathNavigation;", null, null));
+        MethodNode getNavigation = new MethodNode(Opcodes.ACC_PUBLIC, "getNavigation",
+                "()Lnet/minecraft/world/entity/ai/navigation/PathNavigation;", null, null);
+        getNavigation.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        getNavigation.instructions.add(new FieldInsnNode(Opcodes.GETFIELD, MOB, "navigation",
+                "Lnet/minecraft/world/entity/ai/navigation/PathNavigation;"));
+        getNavigation.instructions.add(new InsnNode(Opcodes.ARETURN));
+        mob.methods.add(getNavigation);
+
+        ClassNode navigation = type(NAVIGATION, "java/lang/Object");
+        navigation.fields.add(new FieldNode(Opcodes.ACC_PROTECTED, "mob", "Lnet/minecraft/world/entity/Mob;", null, null));
+        MethodNode stop = new MethodNode(Opcodes.ACC_PUBLIC, "stop", "()V", null, null);
+        stop.instructions.add(new InsnNode(Opcodes.RETURN));
+        navigation.methods.add(stop);
+        MethodNode moveTo = new MethodNode(Opcodes.ACC_PUBLIC, "moveTo",
+                "(Lnet/minecraft/world/level/pathfinder/Path;D)Z", null, null);
+        moveTo.instructions.add(new InsnNode(Opcodes.ICONST_1));
+        moveTo.instructions.add(new InsnNode(Opcodes.IRETURN));
+        navigation.methods.add(moveTo);
+        index.put(NAVIGATION, navigation);
+
+        var transformer = new FusionCoreMod.BodyTransformer(index);
+        ClassNode transformedEntity = transformer.transform(entity, null);
+        assertTrue(calls(method(transformedEntity, "cannedmonster$write$deltaMovement"),
+                "cc/sighs/cannedmonster/fusion/FusionRiding", "velocityTarget"));
+        MethodNode transformedRiding = method(transformedEntity, "startRiding");
+        assertTrue(transformedRiding.instructions.getFirst() instanceof VarInsnNode load && load.var == 1);
+        assertTrue(calls(transformedRiding, "cc/sighs/cannedmonster/fusion/BodyLinks", "body"));
+
+        ClassNode transformedMob = transformer.transform(mob, null);
+        assertTrue(calls(method(transformedMob, "getNavigation"), "cc/sighs/cannedmonster/fusion/FusionMotion", "navigation"));
+
+        ClassNode transformedNavigation = transformer.transform(navigation, null);
+        assertTrue(calls(method(transformedNavigation, "stop"), "cc/sighs/cannedmonster/fusion/FusionMotion", "guardStop"));
+        assertTrue(calls(method(transformedNavigation, "moveTo"), "cc/sighs/cannedmonster/fusion/FusionMotion", "guardMoveTo"));
+    }
+
+    @Test
+    void unknownLifecycleVelocityWritesUseTheRidingBoundary() {
+        Map<String, ClassNode> index = fixture();
+        MethodNode ai = new MethodNode(Opcodes.ACC_PUBLIC, "aiStep", "()V", null, null);
+        ai.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        ai.instructions.add(new InsnNode(Opcodes.DCONST_0));
+        ai.instructions.add(new InsnNode(Opcodes.DCONST_0));
+        ai.instructions.add(new InsnNode(Opcodes.DCONST_1));
+        ai.instructions.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, SPECIES, "setDeltaMovement", "(DDD)V", false));
+        ai.instructions.add(new InsnNode(Opcodes.RETURN));
+        index.get(SPECIES).methods.add(ai);
+        ClassNode transformed = new FusionCoreMod.BodyTransformer(index).transform(index.get(SPECIES), null);
+        assertTrue(calls(method(transformed, "aiStep"), "cc/sighs/cannedmonster/fusion/FusionRiding", "autonomousVelocity"));
+    }
+
+    @Test
+    void directVelocityFieldWritesUseTheSameBoundaryWithoutFieldNameAssumptions() {
+        Map<String, ClassNode> index = fixture();
+        String vector = "Lnet/minecraft/world/phys/Vec3;";
+        index.get(ENTITY).fields.add(new FieldNode(Opcodes.ACC_PUBLIC, "arbitraryVelocity", vector, null, null));
+        MethodNode setter = new MethodNode(Opcodes.ACC_PUBLIC, "setDeltaMovement", "(" + vector + ")V", null, null);
+        setter.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        setter.instructions.add(new VarInsnNode(Opcodes.ALOAD, 1));
+        setter.instructions.add(new FieldInsnNode(Opcodes.PUTFIELD, ENTITY, "arbitraryVelocity", vector));
+        setter.instructions.add(new InsnNode(Opcodes.RETURN));
+        index.get(ENTITY).methods.add(setter);
+        MethodNode ai = new MethodNode(Opcodes.ACC_PUBLIC, "aiStep", "()V", null, null);
+        ai.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        ai.instructions.add(new InsnNode(Opcodes.ACONST_NULL));
+        ai.instructions.add(new FieldInsnNode(Opcodes.PUTFIELD, SPECIES, "arbitraryVelocity", vector));
+        ai.instructions.add(new InsnNode(Opcodes.RETURN));
+        index.get(SPECIES).methods.add(ai);
+        ClassNode transformed = new FusionCoreMod.BodyTransformer(index).transform(index.get(SPECIES), null);
+        assertTrue(calls(method(transformed, "aiStep"), "cc/sighs/cannedmonster/fusion/FusionRiding", "autonomousVelocity"));
+        for (AbstractInsnNode instruction : method(transformed, "aiStep").instructions) {
+            if (instruction instanceof MethodInsnNode call && call.name.equals("autonomousVelocity")) {
+                assertEquals("(Lnet/minecraft/world/entity/Entity;" + vector + "Lnet/minecraft/world/entity/Entity;)V", call.desc);
+                assertEquals(Opcodes.ALOAD, call.getPrevious().getOpcode());
+            }
+        }
+    }
+
+    private static MethodNode method(ClassNode node, String name) {
+        return node.methods.stream().filter(method -> method.name.equals(name)).findFirst().orElseThrow();
+    }
+
+    private static boolean calls(MethodNode method, String owner, String name) {
+        for (AbstractInsnNode instruction : method.instructions) {
+            if (instruction instanceof MethodInsnNode call && call.owner.equals(owner) && call.name.equals(name)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static ClassLoader transformedLoader(Map<String, ClassNode> index, FusionCoreMod.BodyTransformer transformer) {

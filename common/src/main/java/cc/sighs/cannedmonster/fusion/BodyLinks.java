@@ -30,6 +30,17 @@ public final class BodyLinks {
         return sharedAccessors.contains(accessor) ? body(data) : data;
     }
 
+    public static Object session(Object entity) {
+        Object body = body(entity);
+        return body instanceof BoundObject bound ? bound.cannedmonster$session() : null;
+    }
+
+    public static void session(Object body, Object session) {
+        if (body instanceof BoundObject bound) {
+            bound.cannedmonster$session(session);
+        }
+    }
+
     public static synchronized void shareAccessor(Object accessor) {
         Set<Object> copy = Collections.newSetFromMap(new IdentityHashMap<>());
         copy.addAll(sharedAccessors);

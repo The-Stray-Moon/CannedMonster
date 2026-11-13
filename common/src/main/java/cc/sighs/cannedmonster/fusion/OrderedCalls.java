@@ -37,6 +37,11 @@ public final class OrderedCalls {
         SESSIONS.remove(host);
     }
 
+    public static Object currentMember() {
+        Frame frame = FRAMES.get().peek();
+        return frame == null ? null : frame.current;
+    }
+
     public static boolean dispatch(Object receiver, String method, boolean boundary) {
         Object host = BodyLinks.body(receiver);
         Session session = SESSIONS.get(host);
