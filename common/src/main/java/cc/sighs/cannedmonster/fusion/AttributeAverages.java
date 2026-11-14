@@ -63,24 +63,30 @@ public final class AttributeAverages {
     }
 
     public static void apply(LivingEntity body, List<Map<ResourceLocation, Double>> members) {
+        apply(body, members, Set.of());
+    }
+
+    public static void apply(LivingEntity body, List<Map<ResourceLocation, Double>> members, Set<ResourceLocation> excluded) {
         var access = (NativeAttributeAccess) body.getAttributes();
         var averages = mean(members);
-        averages.keySet().forEach(id -> BuiltInRegistries.ATTRIBUTE.getHolder(id)
+        averages.keySet().stream().filter(id -> !excluded.contains(id)).forEach(id -> BuiltInRegistries.ATTRIBUTE.getHolder(id)
                 .orElseThrow(() -> new IllegalArgumentException("Missing fusion attribute: " + id)));
         var introduced = ADDED.computeIfAbsent(body, ignored -> new HashSet<>());
         var ownOrigins = members.getLast();
         introduced.removeIf(holder -> {
             var id = holder.unwrapKey().orElseThrow().location();
+            if (excluded.contains(id)) return false;
             if (averages.containsKey(id)) return ownOrigins.containsKey(id);
             access.cannedmonster$instances().remove(holder);
             return true;
         });
-        averages.keySet().stream().filter(id -> !ownOrigins.containsKey(id))
+        averages.keySet().stream().filter(id -> !excluded.contains(id) && !ownOrigins.containsKey(id))
                 .forEach(id -> introduced.add(BuiltInRegistries.ATTRIBUTE.getHolder(id).orElseThrow()));
         boolean previous = APPLYING.get();
         APPLYING.set(true);
         try {
             averages.forEach((id, value) -> {
+                if (excluded.contains(id)) return;
                 var holder = BuiltInRegistries.ATTRIBUTE.getHolder(id).orElseThrow();
                 AttributeInstance instance = body.getAttribute(holder);
                 if (instance == null) {
@@ -98,6 +104,24 @@ public final class AttributeAverages {
         }
         if (introduced.isEmpty()) ADDED.remove(body);
         if (body.getHealth() > body.getMaxHealth()) body.setHealth(body.getMaxHealth());
+    }
+
+    public static void track(LivingEntity body) {
+        BuiltInRegistries.ATTRIBUTE.holders().forEach(holder -> {
+            AttributeInstance instance = body.getAttribute(holder);
+            if (instance != null) OWNERS.put(instance, new java.lang.ref.WeakReference<>(body));
+        });
+    }
+
+    public static void quiet(Runnable action) {
+        boolean previous = APPLYING.get();
+        APPLYING.set(true);
+        try {
+            action.run();
+        } finally {
+            if (previous) APPLYING.set(true);
+            else APPLYING.remove();
+        }
     }
 
     public static ListTag save(List<Map<ResourceLocation, Double>> members) {

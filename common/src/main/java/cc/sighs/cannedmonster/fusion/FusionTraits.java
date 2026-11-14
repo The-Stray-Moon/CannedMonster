@@ -40,10 +40,14 @@ public final class FusionTraits {
         return original && !any(entity, member -> !member.canDrownInFluidType(type));
     }
 
+    public static LivingEntity gazeTarget(Player player) {
+        return FusionGaze.target(player);
+    }
+
     public static boolean allowedTarget(Player player, Entity target) {
         return target instanceof LivingEntity living && living.isAlive() && !living.isRemoved()
                 && living.level() == player.level() && !BodyLinks.same(player, living)
-                && player.getLastHurtMob() == living && player.tickCount - player.getLastHurtMobTimestamp() <= 100
+                && FusionGaze.target(player) == living
                 && player.canAttack(living) && (!(living instanceof Player other) || player.canHarmPlayer(other));
     }
 

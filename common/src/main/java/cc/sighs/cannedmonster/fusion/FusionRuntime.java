@@ -71,7 +71,8 @@ public final class FusionRuntime {
         List<Mob> bound = new ArrayList<>();
         var originalState = AttributeAverages.snapshot(host);
         try {
-            AttributeAverages.apply(host, origins);
+            AttributeAverages.apply(host, origins, host instanceof Player ? Set.of(PlayerSpeed.ATTRIBUTE) : Set.of());
+            if (host instanceof Player player) PlayerSpeed.apply(player, facets, origins);
             for (Mob facet : facets) {
                 facet.moveTo(host.getX(), host.getY(), host.getZ(), host.getYRot(), host.getXRot());
                 BodyLinks.bind(facet, host, facet.getEntityData(), host.getEntityData());
@@ -95,6 +96,7 @@ public final class FusionRuntime {
             ATTRIBUTE_ORIGINS.remove(host);
             BodyLinks.session(host, null);
             bound.forEach(facet -> BodyLinks.unbind(facet, facet.getEntityData()));
+            if (host instanceof Player player) PlayerSpeed.clear(player);
             try { originalState.restore(host); }
             catch (RuntimeException rollback) { exception.addSuppressed(rollback); }
             throw exception;
@@ -115,6 +117,7 @@ public final class FusionRuntime {
         own.put(attribute, value);
         updated.set(updated.size() - 1, Map.copyOf(own));
         ATTRIBUTE_ORIGINS.put(body, List.copyOf(updated));
+        if (body instanceof Player player && attribute.equals(PlayerSpeed.ATTRIBUTE)) PlayerSpeed.refresh(player);
     }
 
     public static void prepend(LivingEntity host, Mob incoming) {
@@ -172,7 +175,8 @@ public final class FusionRuntime {
         var remainingOrigins = List.copyOf(previousOrigins.subList(1, previousOrigins.size()));
         detach(host);
         try {
-            if (remaining.isEmpty()) AttributeAverages.apply(host, List.of(previousOrigins.getLast()));
+            if (remaining.isEmpty()) AttributeAverages.apply(host, List.of(previousOrigins.getLast()),
+                    host instanceof Player ? Set.of(PlayerSpeed.ATTRIBUTE) : Set.of());
             else attach(host, remaining, remainingOrigins);
             return peeled;
         } catch (RuntimeException failure) {
@@ -187,10 +191,9 @@ public final class FusionRuntime {
         Mob facet = (Mob) entity;
         if (!facet.level().isClientSide && facet.isAlive() && !facet.isNoAi()) {
             if (BodyLinks.body(facet) instanceof Player player) {
-                LivingEntity target = player.getLastHurtMob();
-                LivingEntity allowed = FusionTraits.allowedTarget(player, target) ? target : null;
-                facet.setTarget(allowed);
-                facet.getBrain().setMemory(net.minecraft.world.entity.ai.memory.MemoryModuleType.ATTACK_TARGET, allowed);
+                LivingEntity target = FusionTraits.gazeTarget(player);
+                facet.setTarget(target);
+                facet.getBrain().setMemory(net.minecraft.world.entity.ai.memory.MemoryModuleType.ATTACK_TARGET, target);
             }
             ((NativeMobAccess) facet).cannedmonster$serverAiStep();
         }
@@ -272,6 +275,7 @@ public final class FusionRuntime {
     }
 
     public static void detach(LivingEntity host) {
+        if (host instanceof Player player) PlayerSpeed.clear(player);
         ATTRIBUTE_ORIGINS.remove(host);
         OrderedCalls.unbind(host);
         BodyLinks.session(host, null);
@@ -285,5 +289,6 @@ public final class FusionRuntime {
         hosts.forEach(FusionRuntime::detach);
         PlayerFusion.clear();
         RidingState.clear();
+        FusionGaze.clear();
     }
 }
