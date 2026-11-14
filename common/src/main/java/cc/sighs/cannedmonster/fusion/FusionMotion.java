@@ -26,6 +26,8 @@ public final class FusionMotion {
     private static final ExecutionSlot<PathNavigation> NAVIGATION_TICK = new ExecutionSlot<>();
     private static final ExecutionSlot<Mob> NAVIGATION_CALLER = new ExecutionSlot<>();
     private Mob holdingMember;
+    @Nullable
+    private FusionPursuit.Pursuit pursuit;
 
     FusionMotion(Mob body, List<Mob> members) {
         this.body = body;
@@ -131,15 +133,39 @@ public final class FusionMotion {
         });
     }
 
+    Mob body() { return body; }
+
+    boolean owns(Mob member) { return member == body || members.contains(member); }
+
+    FusionPursuit.Pursuit pursuit() {
+        if (pursuit == null) pursuit = new FusionPursuit.Pursuit();
+        return pursuit;
+    }
+
+    @Nullable
+    FusionPursuit.Pursuit pursuitIfPresent() { return pursuit; }
+
+    void clearPursuit() { pursuit = null; }
+
+    private boolean reserved(Mob member) {
+        FusionPursuit.Pursuit active = pursuit;
+        return member == body && active != null && active.owner != null && active.owner != body
+                && active.target != null && active.timing.active(body.tickCount);
+    }
+
     @Nullable
     Mob pathOwner() { return (Mob) claims.owner(this::pathActive); }
 
     boolean claim(Mob member) {
+        if (reserved(member)) return false;
         if (!claims.claim(member, priority(member), this::pathActive)) return false;
         holdingMember = null;
         return true;
     }
-    boolean mayPath(Mob member) { return claims.allows(member, priority(member), this::pathActive); }
+    boolean mayPath(Mob member) {
+        if (reserved(member)) return false;
+        return claims.allows(member, priority(member), this::pathActive);
+    }
     int priority(Mob member) {
         int index = members.indexOf(member);
         return index < 0 ? members.size() : index;

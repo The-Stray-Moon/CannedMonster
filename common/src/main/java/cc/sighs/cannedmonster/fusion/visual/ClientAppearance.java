@@ -4,6 +4,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 
 import java.util.*;
@@ -68,14 +69,14 @@ public final class ClientAppearance {
         }
     }
 
-    public static List<Mob> members(Mob body) {
+    public static List<Mob> members(LivingEntity body) {
         checkLevel();
         View view = VIEWS.get(body.getUUID());
         if (view == null || view.entityId != body.getId()) return List.of();
         return view.members.stream().map(Member::entity).toList();
     }
 
-    public static void pose(Mob member, Mob body) {
+    public static void pose(Mob member, LivingEntity body) {
         member.setPos(body.position());
         member.xo = body.xo;
         member.yo = body.yo;

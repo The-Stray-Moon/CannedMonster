@@ -96,6 +96,7 @@ public final class FusionNavigation extends PathNavigation {
 
     @Override
     public Path createPath(Entity entity, int radius) {
+        FusionPursuit.note(this, owner, entity);
         PathNavigation target = pathTarget();
         return target == null ? null : motion().query(owner, () -> target.createPath(entity, radius));
     }

@@ -5,6 +5,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import org.joml.Matrix4f;
 
@@ -12,7 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class FusionRenderer {
-    private static Mob body;
+    private static LivingEntity body;
     private static MultiBufferSource originalBuffers;
     private static long renderedFrames;
     private static List<Integer> lastVertexCounts = List.of();
@@ -28,7 +29,7 @@ public final class FusionRenderer {
     @SuppressWarnings({"rawtypes", "unchecked"})
     public static void render(EntityRenderer renderer, Entity entity, float yaw, float partialTick,
                               PoseStack poses, MultiBufferSource buffers, int light) {
-        if (!(entity instanceof Mob host) || active()) {
+        if (!(entity instanceof LivingEntity host) || active()) {
             renderer.render(entity, yaw, partialTick, poses, buffers, light);
             return;
         }
@@ -37,7 +38,7 @@ public final class FusionRenderer {
             renderer.render(entity, yaw, partialTick, poses, buffers, light);
             return;
         }
-        List<Mob> members = new ArrayList<>(facets);
+        List<LivingEntity> members = new ArrayList<>(facets);
         members.add(host);
         Matrix4f inverse = new Matrix4f(poses.last().pose()).invert();
         List<Integer> counts = new ArrayList<>();
@@ -45,8 +46,8 @@ public final class FusionRenderer {
         originalBuffers = buffers;
         try {
             for (int i = 0; i < members.size(); i++) {
-                Mob member = members.get(i);
-                if (member != host) ClientAppearance.pose(member, host);
+                LivingEntity member = members.get(i);
+                if (member != host) ClientAppearance.pose((Mob) member, host);
                 float height = Math.max(0.01F, host.getBbHeight());
                 float lower = i == members.size() - 1 ? Float.NEGATIVE_INFINITY : height * (members.size() - i - 1) / members.size();
                 float upper = i == 0 ? Float.POSITIVE_INFINITY : height * (members.size() - i) / members.size();

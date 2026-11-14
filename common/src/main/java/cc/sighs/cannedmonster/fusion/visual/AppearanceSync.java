@@ -4,6 +4,7 @@ import cc.sighs.cannedmonster.fusion.FusionMotion;
 import cc.sighs.cannedmonster.fusion.FusionRuntime;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
@@ -14,19 +15,24 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import java.util.*;
 
 public final class AppearanceSync {
-    private static final Map<Mob, Composition> COMPOSITIONS = new IdentityHashMap<>();
+    private static final Map<LivingEntity, Composition> COMPOSITIONS = new IdentityHashMap<>();
     private record Composition(List<Mob> members, List<UUID> ids) {}
 
     private AppearanceSync() {}
 
     public static void tick(EntityTickEvent.Post event) {
-        if (!(event.getEntity() instanceof Mob body) || body.level().isClientSide || body.tickCount % 2 != 0) return;
+        if (!(event.getEntity() instanceof LivingEntity body) || body.level().isClientSide || body.tickCount % 2 != 0) return;
         if (FusionRuntime.facets(body).isEmpty() && !COMPOSITIONS.containsKey(body)) return;
-        PacketDistributor.sendToPlayersTrackingEntity(body, snapshot(body));
+        boolean hadComposition = COMPOSITIONS.containsKey(body);
+        FusionAppearance appearance = snapshot(body);
+        PacketDistributor.sendToPlayersTrackingEntity(body, appearance);
+        if (body instanceof ServerPlayer player && (hadComposition || !appearance.members().isEmpty())) {
+            PacketDistributor.sendToPlayer(player, appearance);
+        }
     }
 
     public static void tracking(PlayerEvent.StartTracking event) {
-        if (event.getTarget() instanceof Mob body && event.getEntity() instanceof ServerPlayer player
+        if (event.getTarget() instanceof LivingEntity body && event.getEntity() instanceof ServerPlayer player
                 && !FusionRuntime.facets(body).isEmpty()) {
             PacketDistributor.sendToPlayer(player, snapshot(body));
         }
@@ -40,7 +46,7 @@ public final class AppearanceSync {
         COMPOSITIONS.clear();
     }
 
-    private static FusionAppearance snapshot(Mob body) {
+    private static FusionAppearance snapshot(LivingEntity body) {
         List<Mob> facets = FusionRuntime.facets(body);
         if (facets.isEmpty()) {
             COMPOSITIONS.remove(body);
@@ -58,7 +64,8 @@ public final class AppearanceSync {
             for (var item : ((AppearanceData) facet.getEntityData()).cannedmonster$items()) values.add(value(facet, item));
             members.add(new FusionAppearance.Member(composition.ids.get(i), BuiltInRegistries.ENTITY_TYPE.getKey(facet.getType()), List.copyOf(values)));
         }
-        return new FusionAppearance(body.getId(), body.getUUID(), FusionMotion.controlIndex(body), List.copyOf(members));
+        int control = body instanceof Mob mob ? FusionMotion.controlIndex(mob) : -1;
+        return new FusionAppearance(body.getId(), body.getUUID(), control, List.copyOf(members));
     }
 
     private static <T> net.minecraft.network.syncher.SynchedEntityData.DataValue<T> value(

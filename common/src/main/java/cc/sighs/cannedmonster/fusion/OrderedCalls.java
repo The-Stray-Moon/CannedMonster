@@ -15,7 +15,13 @@ public final class OrderedCalls {
             Map<String, MethodHandle> methods = new HashMap<>();
             for (String name : List.of("tick", "aiStep")) {
                 try {
-                    methods.put(name, MethodHandles.publicLookup().findVirtual(type, name, MethodType.methodType(void.class)));
+                    if (net.minecraft.world.entity.player.Player.class.isAssignableFrom(type)) {
+                        Class<?> player = net.minecraft.world.entity.player.Player.class;
+                        methods.put(name, MethodHandles.privateLookupIn(player, MethodHandles.lookup())
+                                .findSpecial(player, name, MethodType.methodType(void.class), player));
+                    } else {
+                        methods.put(name, MethodHandles.publicLookup().findVirtual(type, name, MethodType.methodType(void.class)));
+                    }
                 } catch (ReflectiveOperationException exception) {
                     throw new IllegalStateException("Missing lifecycle entry " + type.getName() + "." + name, exception);
                 }
@@ -44,6 +50,7 @@ public final class OrderedCalls {
 
     public static boolean dispatch(Object receiver, String method, boolean boundary) {
         Object host = BodyLinks.body(receiver);
+        if (host instanceof net.minecraft.world.entity.player.Player player && (!player.isAlive() || player.isRemoved())) return false;
         Session session = SESSIONS.get(host);
         if (session == null) {
             return false;

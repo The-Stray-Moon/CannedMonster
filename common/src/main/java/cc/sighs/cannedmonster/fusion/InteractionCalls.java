@@ -12,12 +12,10 @@ public final class InteractionCalls {
     }
 
     public static InteractionResult item(ItemStack stack, Player player, LivingEntity entity, InteractionHand hand) {
-        if (entity instanceof Mob host) {
-            for (Mob member : FusionRuntime.facets(host)) {
-                InteractionResult result = stack.interactLivingEntity(player, member, hand);
-                if (result != InteractionResult.PASS) {
-                    return result;
-                }
+        for (Mob member : FusionRuntime.facets(entity)) {
+            InteractionResult result = stack.interactLivingEntity(player, member, hand);
+            if (result != InteractionResult.PASS) {
+                return result;
             }
         }
         return stack.interactLivingEntity(player, entity, hand);

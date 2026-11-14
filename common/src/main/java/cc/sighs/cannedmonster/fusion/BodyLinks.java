@@ -9,6 +9,7 @@ public final class BodyLinks {
     private static final Map<Object, Object> FALLBACK = Collections.synchronizedMap(new IdentityHashMap<>());
     private static final Map<Object, Integer> HOSTS = new IdentityHashMap<>();
     private static volatile Set<Object> sharedAccessors = Set.of();
+    private static volatile Set<Object> playerAccessors = Set.of();
 
     private BodyLinks() {
     }
@@ -27,7 +28,20 @@ public final class BodyLinks {
     }
 
     public static Object data(Object data, Object accessor) {
+        if (data instanceof BoundObject bound && bound.cannedmonster$session() instanceof net.minecraft.world.entity.player.Player) {
+            return playerAccessors.contains(accessor) ? body(data) : data;
+        }
         return sharedAccessors.contains(accessor) ? body(data) : data;
+    }
+
+    public static synchronized void shareAccessor(Object accessor, boolean player) {
+        shareAccessor(accessor);
+        if (player) {
+            Set<Object> copy = Collections.newSetFromMap(new IdentityHashMap<>());
+            copy.addAll(playerAccessors);
+            copy.add(accessor);
+            playerAccessors = Collections.unmodifiableSet(copy);
+        }
     }
 
     public static Object session(Object entity) {
@@ -64,6 +78,7 @@ public final class BodyLinks {
         }
         set(facet, null);
         set(facetData, null);
+        if (facetData instanceof BoundObject bound) bound.cannedmonster$session(null);
     }
 
     private static void set(Object object, Object body) {

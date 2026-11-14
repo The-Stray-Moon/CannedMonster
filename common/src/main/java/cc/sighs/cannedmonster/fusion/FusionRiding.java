@@ -94,6 +94,7 @@ public final class FusionRiding {
     }
 
     public static Object velocityTarget(Object entity) {
+        if (entity instanceof Entity value && FusionTraits.playerMember(value)) return entity;
         Frame frame = EXECUTION.get();
         if (frame != null && (frame.source == entity || frame.body == entity)) return frame.body;
         return BodyLinks.body(entity);
@@ -101,8 +102,13 @@ public final class FusionRiding {
 
     public static void autonomousVelocity(Entity entity, Vec3 velocity, Entity origin) {
         Frame frame = EXECUTION.get();
-        if (BodyLinks.same(entity, origin) && BodyLinks.body(entity) instanceof Mob body
-                && authoritative(body) && frame == null && source(body) != null) return;
+        if (frame == null && BodyLinks.body(entity) instanceof Mob body) {
+            if (BodyLinks.body(entity) != entity) {
+                return;
+            }
+            if (BodyLinks.same(entity, origin) && authoritative(body)
+                    && (source(body) != null || FusionPursuit.direct(body))) return;
+        }
         entity.setDeltaMovement(velocity);
     }
 

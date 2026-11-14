@@ -44,6 +44,7 @@ public final class FusionCoreMod implements ICoreMod {
         private static final String BOUND = "cc/sighs/cannedmonster/fusion/BoundObject";
         private static final String CALLS = "cc/sighs/cannedmonster/fusion/OrderedCalls";
         private static final String MOTION = "cc/sighs/cannedmonster/fusion/FusionMotion";
+        private static final String PURSUIT = "cc/sighs/cannedmonster/fusion/FusionPursuit";
         private static final String NAVIGATION = "net/minecraft/world/entity/ai/navigation/PathNavigation";
         private static final Set<String> CORE = Set.of(ENTITY, LIVING, MOB);
         private static final Set<String> LOCAL_TYPES = Set.of(
@@ -97,7 +98,8 @@ public final class FusionCoreMod implements ICoreMod {
                 }
             }
             for (ClassNode node : index.values()) {
-                if (CORE.contains(node.name) || node.name.equals(DATA) || node.name.equals(NAVIGATION) || subtype(node.name, MOB)) {
+                if (CORE.contains(node.name) || node.name.equals(DATA) || subtype(node.name, NAVIGATION)
+                        || subtype(node.name, MOB) || subtype(node.name, "net/minecraft/world/entity/player/Player")) {
                     targetNames.add(node.name);
                 } else {
                     for (MethodNode method : node.methods) {
@@ -225,7 +227,7 @@ public final class FusionCoreMod implements ICoreMod {
                         }
                     }
                 }
-                if (subtype(node.name, MOB) && method.desc.equals("()V")
+                if ((subtype(node.name, MOB) || node.name.equals("net/minecraft/world/entity/player/Player")) && method.desc.equals("()V")
                         && (method.name.equals("tick") || method.name.equals("aiStep"))
                         && (method.access & (Opcodes.ACC_ABSTRACT | Opcodes.ACC_STATIC)) == 0) {
                     LabelNode original = new LabelNode();
@@ -237,6 +239,42 @@ public final class FusionCoreMod implements ICoreMod {
                     guard.add(new JumpInsnNode(Opcodes.IFEQ, original));
                     guard.add(new InsnNode(Opcodes.RETURN));
                     guard.add(original);
+                    method.instructions.insert(guard);
+                }
+                if (subtype(node.name, MOB) && (method.access & (Opcodes.ACC_ABSTRACT | Opcodes.ACC_STATIC | Opcodes.ACC_NATIVE)) == 0
+                        && ((method.name.equals("doHurtTarget") && method.desc.equals("(Lnet/minecraft/world/entity/Entity;)Z"))
+                        || (method.name.equals("performRangedAttack") && method.desc.equals("(Lnet/minecraft/world/entity/LivingEntity;F)V")))) {
+                    LabelNode original = new LabelNode();
+                    InsnList guard = new InsnList();
+                    guard.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                    guard.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                    guard.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "cc/sighs/cannedmonster/fusion/FusionTraits", "allowMemberAttack",
+                            "(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/entity/Entity;)Z", false));
+                    guard.add(new JumpInsnNode(Opcodes.IFNE, original));
+                    if (method.name.equals("doHurtTarget")) {
+                        guard.add(new InsnNode(Opcodes.ICONST_0));
+                        guard.add(new InsnNode(Opcodes.IRETURN));
+                    } else guard.add(new InsnNode(Opcodes.RETURN));
+                    guard.add(original);
+                    method.instructions.insert(guard);
+                }
+                if ((node.name.equals(LIVING) || subtype(node.name, MOB) || node.name.equals("net/minecraft/world/entity/player/Player"))
+                        && method.name.equals("hurt") && method.desc.equals("(Lnet/minecraft/world/damagesource/DamageSource;F)Z")
+                        && (method.access & (Opcodes.ACC_ABSTRACT | Opcodes.ACC_STATIC | Opcodes.ACC_NATIVE)) == 0) {
+                    LabelNode original = new LabelNode();
+                    InsnList guard = new InsnList();
+                    guard.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                    guard.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                    guard.add(new VarInsnNode(Opcodes.FLOAD, 2));
+                    guard.add(new InsnNode(node.name.equals(LIVING) ? Opcodes.ICONST_1 : Opcodes.ICONST_0));
+                    guard.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "cc/sighs/cannedmonster/fusion/HurtCalls", "dispatch",
+                            "(Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/world/damagesource/DamageSource;FZ)Ljava/lang/Boolean;", false));
+                    guard.add(new InsnNode(Opcodes.DUP));
+                    guard.add(new JumpInsnNode(Opcodes.IFNULL, original));
+                    guard.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "java/lang/Boolean", "booleanValue", "()Z", false));
+                    guard.add(new InsnNode(Opcodes.IRETURN));
+                    guard.add(original);
+                    guard.add(new InsnNode(Opcodes.POP));
                     method.instructions.insert(guard);
                 }
                 if (subtype(node.name, LIVING) && method.name.equals("remove")
@@ -285,6 +323,17 @@ public final class FusionCoreMod implements ICoreMod {
                     method.instructions.insert(hook);
                 }
 
+                if (subtype(node.name, NAVIGATION) && method.name.equals("createPath")
+                        && method.desc.equals("(Lnet/minecraft/world/entity/Entity;I)Lnet/minecraft/world/level/pathfinder/Path;")) {
+                    InsnList hook = new InsnList();
+                    hook.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                    hook.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                    hook.add(new FieldInsnNode(Opcodes.GETFIELD, NAVIGATION, "mob", "Lnet/minecraft/world/entity/Mob;"));
+                    hook.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                    hook.add(new MethodInsnNode(Opcodes.INVOKESTATIC, PURSUIT, "note",
+                            "(Lnet/minecraft/world/entity/ai/navigation/PathNavigation;Lnet/minecraft/world/entity/Mob;Lnet/minecraft/world/entity/Entity;)V", false));
+                    method.instructions.insert(hook);
+                }
                 if (node.name.equals(NAVIGATION) && method.name.equals("moveTo")
                         && method.desc.equals("(Lnet/minecraft/world/level/pathfinder/Path;D)Z")) {
                     LabelNode original = new LabelNode();
@@ -343,7 +392,7 @@ public final class FusionCoreMod implements ICoreMod {
             if (node.name.equals(ENTITY) || node.name.equals(DATA)) {
                 injectBinding(node);
             }
-            if (node.name.equals(ENTITY)) {
+            if (node.name.equals(ENTITY) || node.name.equals(DATA)) {
                 injectSession(node);
             }
             return node;
@@ -439,6 +488,15 @@ public final class FusionCoreMod implements ICoreMod {
             method.instructions.add(new MethodInsnNode(Opcodes.INVOKESTATIC,
                     velocity ? "cc/sighs/cannedmonster/fusion/FusionRiding" : LINKS,
                     velocity ? "velocityTarget" : "body", "(Ljava/lang/Object;)Ljava/lang/Object;", false));
+            if (owner.equals(MOB)) {
+                LabelNode compatible = new LabelNode();
+                method.instructions.add(new InsnNode(Opcodes.DUP));
+                method.instructions.add(new TypeInsnNode(Opcodes.INSTANCEOF, owner));
+                method.instructions.add(new JumpInsnNode(Opcodes.IFNE, compatible));
+                method.instructions.add(new InsnNode(Opcodes.POP));
+                method.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                method.instructions.add(compatible);
+            }
             method.instructions.add(new TypeInsnNode(Opcodes.CHECKCAST, owner));
             Type type = Type.getType(field.desc);
             if (!read) {

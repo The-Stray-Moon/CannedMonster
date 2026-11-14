@@ -7,7 +7,7 @@
     "PlayerInteractionMixin", "TargetingIdentityMixin", "ProjectileIdentityMixin", "QueryIdentityMixin",
     "DamageIdentityMixin", "SpawnInheritanceMixin", "AppearanceDataAccess", "FoodOnAStickMixin",
     "LivingLootAccess", "FusionLootMixin", "FusionEquipmentLootMixin",
-    "RidingPhysicsMixin", "RidingEntityMixin", "RidingNetworkMixin", "NavigationQueryMixin"],
+    "RidingPhysicsMixin", "RidingEntityMixin", "RidingNetworkMixin", "NavigationQueryMixin", "PursuitTravelMixin", "FusionPhysiologyMixin", "PlayerBodyGuardMixin", "PlayerMemberMobMixin", "FusionAttributeWriteMixin", "PlayerMemberBrainMixin", "PlayerFusionLogoutMixin"],
   "client": ["AppearanceWalkMixin", "FusionRenderDispatcherMixin", "FusionEntityRendererMixin"],
   "injectors": { "defaultRequire": 1 }
 }

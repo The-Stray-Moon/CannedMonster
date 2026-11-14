@@ -33,9 +33,8 @@ public final class CanActions {
                 || !target.isAlive() || target.isRemoved() || target.isPassenger() || target.isVehicle() || target.isLeashed()) return false;
         try {
             if (!CanContents.filled(stack)) {
-                if (!item.storesFusion() && !FusionRuntime.facets(target).isEmpty()) {
-                    message(actor, "message.cannedmonster.large_required");
-                    return false;
+                if (!FusionRuntime.facets(target).isEmpty() && !item.storesFusion()) {
+                    return peel(stack, target, actor);
                 }
                 CompoundTag data = target.saveWithoutId(new CompoundTag());
                 data.putString("id", BuiltInRegistries.ENTITY_TYPE.getKey(target.getType()).toString());
@@ -62,6 +61,17 @@ public final class CanActions {
         }
     }
 
+    private static boolean peel(ItemStack stack, Mob target, Player actor) {
+        Mob member = FusionRuntime.facets(target).getFirst();
+        CompoundTag data = FusionRuntime.independentSave(member);
+        ItemStack prepared = stack.copyWithCount(1);
+        CanContents.store(prepared, data, member.getName().getString());
+        FusionRuntime.peel(target);
+        stack.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA, prepared.get(net.minecraft.core.component.DataComponents.CUSTOM_DATA));
+        message(actor, "message.cannedmonster.peeled", member.getName());
+        return true;
+    }
+
     public static boolean release(ItemStack stack, ServerLevel level, Vec3 position) {
         Mob mob = null;
         boolean added = false;
@@ -83,7 +93,7 @@ public final class CanActions {
         }
     }
 
-    private static Mob restore(ItemStack stack, ServerLevel level) {
+    public static Mob restore(ItemStack stack, ServerLevel level) {
         if (!CanContents.valid(stack)) return null;
         CompoundTag data = CanContents.entity(stack);
         if (!data.hasUUID("UUID")) return null;
@@ -127,7 +137,7 @@ public final class CanActions {
         return false;
     }
 
-    private static void message(Player player, String key) {
-        if (player != null) player.displayClientMessage(net.minecraft.network.chat.Component.translatable(key), true);
+    private static void message(Player player, String key, Object... args) {
+        if (player != null) player.displayClientMessage(net.minecraft.network.chat.Component.translatable(key, args), true);
     }
 }

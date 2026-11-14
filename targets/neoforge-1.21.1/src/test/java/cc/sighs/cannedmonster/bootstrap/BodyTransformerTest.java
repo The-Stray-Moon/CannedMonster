@@ -291,6 +291,29 @@ class BodyTransformerTest {
         }
     }
 
+    @Test
+    void playerBodyKeepsMobFieldsLocalAndSharesEntityFields() throws Exception {
+        Map<String, ClassNode> index = fixture();
+        String playerName = "net/minecraft/world/entity/player/Player";
+        index.put(playerName, type(playerName, LIVING));
+        ClassLoader loader = transformedLoader(index, new FusionCoreMod.BodyTransformer(index));
+        Class<?> species = loader.loadClass(SPECIES.replace('/', '.'));
+        Class<?> playerType = loader.loadClass(playerName.replace('/', '.'));
+        Object player = playerType.getConstructor().newInstance();
+        Object member = species.getConstructor().newInstance();
+        Object data = new Object();
+        BodyLinks.bind(member, player, data, new Object());
+        try {
+            species.getMethod("writeFire", int.class).invoke(member, 61);
+            assertEquals(61, playerType.getField("remainingFireTicks").get(player));
+            Class<?> mob = loader.loadClass(MOB.replace('/', '.'));
+            mob.getMethod("cannedmonster$write$baseTicks", mob, int.class).invoke(null, member, 29);
+            assertEquals(29, mob.getField("baseTicks").get(member));
+        } finally {
+            BodyLinks.unbind(member, data);
+        }
+    }
+
     private static MethodNode method(ClassNode node, String name) {
         return node.methods.stream().filter(method -> method.name.equals(name)).findFirst().orElseThrow();
     }

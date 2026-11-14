@@ -31,8 +31,14 @@ public final class ThrownCan extends ThrowableItemProjectile {
         ItemStack returned = getItem().copyWithCount(1);
         boolean consumed = false;
         if (returned.getItem() instanceof MonsterCanItem can) {
-            if (hit instanceof EntityHitResult entityHit && !can.random() && entityHit.getEntity() instanceof Mob mob) {
-                CanActions.onMob(returned, mob, getOwner() instanceof Player player ? player : null);
+            if (hit instanceof EntityHitResult entityHit && !can.random()) {
+                Player actor = getOwner() instanceof Player player ? player : null;
+                if (entityHit.getEntity() instanceof Player player) {
+                    if (CanContents.filled(returned)) cc.sighs.cannedmonster.fusion.PlayerFusion.fuse(player, returned);
+                    else cc.sighs.cannedmonster.fusion.PlayerFusion.extract(player, returned);
+                } else if (entityHit.getEntity() instanceof Mob mob) {
+                    CanActions.onMob(returned, mob, actor);
+                }
             } else if (hit instanceof BlockHitResult blockHit) {
                 Vec3 position = Vec3.atBottomCenterOf(blockHit.getBlockPos().relative(blockHit.getDirection()));
                 if (can.random()) {

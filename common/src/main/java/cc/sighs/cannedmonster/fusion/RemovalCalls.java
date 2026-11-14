@@ -22,6 +22,7 @@ public final class RemovalCalls {
     }
 
     public static boolean dispatch(Entity entity, Entity.RemovalReason reason, boolean boundary) {
+        if (FusionTraits.playerMember(entity) || FusionTraits.autonomous(entity)) return true;
         if (!(BodyLinks.body(entity) instanceof Mob host)) return false;
         Deque<Frame> stack = ACTIVE.get();
         Frame frame = stack.peek();

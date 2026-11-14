@@ -44,7 +44,11 @@ check('recapture works',interact(small,released).consumesAction());small=p.getIt
 var rabbit=spawn(ET.RABBIT,-3,0);
 check('filled can fuses',interact(small,rabbit).consumesAction());
 check('fusion empties small can',!CC.filled(p.getItemInHand(Hand.MAIN_HAND)));check('fusion member cow',F.facets(rabbit).size()===1&&F.facets(rabbit).get(0).getType()===ET.COW);
-check('small cannot capture fusion',!interact(p.getItemInHand(Hand.MAIN_HAND),rabbit).consumesAction()&&!rabbit.isRemoved());
+var peelBody=spawn(ET.PIG,-3,4);F.attach(peelBody,List.of(ET.COW.create(world)));
+var peelCan=can('monster_can');check('small peels fusion',interact(peelCan,peelBody).consumesAction());
+peelCan=p.getItemInHand(Hand.MAIN_HAND);
+check('peel stores top member and keeps body',CC.filled(peelCan)&&CC.entity(peelCan).getString('id')==='minecraft:cow'&&!peelBody.isRemoved()&&F.facets(peelBody).size()===0);
+peelBody.discard();
 var big=can('large_monster_can');check('large captures fusion',interact(big,rabbit).consumesAction());big=p.getItemInHand(Hand.MAIN_HAND);check('large persists fused NBT',CC.entity(big).contains('cannedmonster:fusion'));
 check('large release fusion',CA.release(big,world,new Vec(px-6,floor,pz)));
 var fused=null;for(var e of world.getAllEntities()){if(e.getType()===ET.RABBIT&&F.facets(e).size()===1)fused=e;}
@@ -61,5 +65,5 @@ var throwStack=can('throwable_monster_can');check('throwable does not interact d
 var randomStack=can('random_monster_can');check('random no direct storage',!interact(randomStack,blocking).consumesAction()&&!CC.filled(randomStack));
 var space=can('spatial_monster_can');check('spatial no behavior',!interact(space,blocking).consumesAction()&&!blocking.isRemoved());
 var finalStored=can('large_monster_can');check('prepare persistent can',interact(finalStored,existing).consumesAction());p.setItemInHand(Hand.MAIN_HAND,p.getItemInHand(Hand.MAIN_HAND));
-AutoJS.command('save-all flush');
+if(!world.getServer().saveEverything(false,true,true))throw new Error('Native server save did not complete');
 JSON.stringify({passed:checks.length,checks:checks,storedMembers:CC.entity(p.getItemInHand(Hand.MAIN_HAND)).getCompound('cannedmonster:fusion').getList('Members',10).size()});

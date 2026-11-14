@@ -33,6 +33,9 @@ public final class CannedMonsterNeoForge121 {
                         cc.sighs.cannedmonster.fusion.RidingState.CODEC,
                         (packet, context) -> cc.sighs.cannedmonster.fusion.visual.ClientRiding.receive(packet)));
         NeoForge.EVENT_BUS.addListener(cc.sighs.cannedmonster.fusion.RidingState::tick);
+        NeoForge.EVENT_BUS.addListener(cc.sighs.cannedmonster.fusion.FusionPursuit::tick);
+        NeoForge.EVENT_BUS.addListener(cc.sighs.cannedmonster.fusion.PlayerFusion::clone);
+        NeoForge.EVENT_BUS.addListener(cc.sighs.cannedmonster.fusion.PlayerFusion::dimension);
         NeoForge.EVENT_BUS.addListener(cc.sighs.cannedmonster.fusion.RidingState::tracking);
         NeoForge.EVENT_BUS.addListener(cc.sighs.cannedmonster.fusion.RidingState::leave);
         NeoForge.EVENT_BUS.addListener(cc.sighs.cannedmonster.fusion.visual.AppearanceSync::tick);
