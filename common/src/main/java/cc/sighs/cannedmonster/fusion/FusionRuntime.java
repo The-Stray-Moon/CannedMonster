@@ -290,5 +290,6 @@ public final class FusionRuntime {
         PlayerFusion.clear();
         RidingState.clear();
         FusionGaze.clear();
+        TeleportCalls.clear();
     }
 }

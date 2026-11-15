@@ -35,9 +35,17 @@ public abstract class PlayerBodyGuardMixin {
         cir.setReturnValue(FusionTraits.invulnerable((Entity) (Object) this, source, cir.getReturnValue()));
     }
 
-    @Inject(method = {"setPos(DDD)V", "setDeltaMovement(Lnet/minecraft/world/phys/Vec3;)V", "setRemoved", "setYRot", "setXRot"},
+    @Inject(method = {"setPos(DDD)V", "setPosRaw(DDD)V", "setYRot(F)V", "setXRot(F)V"},
             at = @At("HEAD"), cancellable = true)
-    private void cannedmonster$control(CallbackInfo ci) {
+    private void cannedmonster$position(CallbackInfo ci) {
+        Entity entity = (Entity) (Object) this;
+        if (cc.sighs.cannedmonster.fusion.TeleportCalls.allows(entity)) return;
+        if (FusionTraits.playerMember(entity) || FusionTraits.autonomous(entity)) ci.cancel();
+    }
+
+    @Inject(method = {"setDeltaMovement(Lnet/minecraft/world/phys/Vec3;)V", "setRemoved"},
+            at = @At("HEAD"), cancellable = true)
+    private void cannedmonster$state(CallbackInfo ci) {
         Entity entity = (Entity) (Object) this;
         if (FusionTraits.playerMember(entity) || FusionTraits.autonomous(entity)) ci.cancel();
     }
