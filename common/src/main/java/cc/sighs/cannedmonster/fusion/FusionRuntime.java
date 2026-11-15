@@ -218,6 +218,16 @@ public final class FusionRuntime {
         return ((NativeMobAccess) host).cannedmonster$mobInteract(player, hand);
     }
 
+    public static InteractionResult selfInteract(Player player, InteractionHand hand) {
+        if (player.level().isClientSide) return InteractionResult.PASS;
+        for (Mob facet : facets(player)) {
+            if (!facet.isAlive() || facet.isRemoved()) continue;
+            InteractionResult result = ((NativeMobAccess) facet).cannedmonster$mobInteract(player, hand);
+            if (result.consumesAction()) return result;
+        }
+        return InteractionResult.PASS;
+    }
+
     public static void save(Entity entity, CompoundTag tag) {
         if (!(entity instanceof LivingEntity host)) return;
         if (host instanceof Player player && PlayerFusion.saveUnresolved(player, tag)) return;

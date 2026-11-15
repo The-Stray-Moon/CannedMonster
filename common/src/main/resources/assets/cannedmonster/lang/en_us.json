@@ -14,8 +14,6 @@
   "tooltip.cannedmonster.empty": "Empty can",
   "tooltip.cannedmonster.contains": "Stored: %s",
   "tooltip.cannedmonster.contains_count": "Stored: %s mob(s)",
-  "tooltip.cannedmonster.hud_single": "Contents: %s",
-  "tooltip.cannedmonster.hud_count": "Contents: %s mob(s)",
   "tooltip.cannedmonster.small": "Can fuse; an empty can used or thrown at a fused mob peels one member at a time, but cannot store the whole fusion",
   "tooltip.cannedmonster.large": "Can capture and store fused mobs; an empty large can extracts all members at once",
   "tooltip.cannedmonster.hand": "Use on a mob to capture/fuse; hold and release an empty can to extract a member; use on a block to release",

@@ -8,7 +8,7 @@
     "DamageIdentityMixin", "SpawnInheritanceMixin", "AppearanceDataAccess", "FoodOnAStickMixin",
     "LivingLootAccess", "FusionLootMixin", "FusionEquipmentLootMixin", "MemberEventMixin", "DisplayMobMixin", "DisplayEntityMixin", "GuardianAttackClockMixin", "GuardianPresentationMixin", "MemberGoalResetMixin",
     "EntityTeleportMixin", "LivingEntityTeleportMixin", "ShulkerTeleportMixin",
-    "RidingPhysicsMixin", "RidingEntityMixin", "RidingNetworkMixin", "NavigationQueryMixin", "PursuitTravelMixin", "FusionPhysiologyMixin", "PlayerBodyGuardMixin", "PlayerMemberRotationMixin", "PlayerMemberLookMixin", "PlayerMemberMobMixin", "FusionAttributeWriteMixin", "PlayerMemberBrainMixin", "PlayerFusionLogoutMixin"],
+    "RidingPhysicsMixin", "RidingEntityMixin", "RidingNetworkMixin", "NavigationQueryMixin", "PursuitTravelMixin", "FusionPhysiologyMixin", "PlayerBodyGuardMixin", "PlayerMemberRotationMixin", "PlayerMemberLookMixin", "PlayerMemberMobMixin", "FusionAttributeWriteMixin", "PlayerMemberBrainMixin", "PlayerFusionLogoutMixin", "PlayerSelfInteractMixin"],
   "client": ["AppearanceWalkMixin", "FusionRenderDispatcherMixin", "FusionEntityRendererMixin", "PlayerFlightMoveMixin", "ClientMemberEventMixin", "MemberSoundMixin", "GuardianEffectMixin", "MemberModelPassMixin"],
   "injectors": { "defaultRequire": 1 }
 }

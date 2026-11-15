@@ -59,6 +59,13 @@ public abstract class PlayerBodyGuardMixin {
     @Inject(method = "startRiding(Lnet/minecraft/world/entity/Entity;Z)Z", at = @At("HEAD"), cancellable = true)
     private void cannedmonster$ride(Entity vehicle, boolean force, CallbackInfoReturnable<Boolean> cir) {
         Entity entity = (Entity) (Object) this;
-        if (FusionTraits.playerMember(entity) || FusionTraits.autonomous(entity)) cir.setReturnValue(false);
+        if (FusionTraits.playerMember(entity) || FusionTraits.autonomous(entity)) {
+            cir.setReturnValue(false);
+            return;
+        }
+        if (cc.sighs.cannedmonster.fusion.BodyLinks.same(entity, vehicle)
+                || cc.sighs.cannedmonster.fusion.BodyLinks.body(vehicle) instanceof net.minecraft.world.entity.player.Player) {
+            cir.setReturnValue(false);
+        }
     }
 }
