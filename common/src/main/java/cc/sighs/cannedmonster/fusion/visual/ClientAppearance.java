@@ -12,40 +12,99 @@ import java.util.*;
 
 public final class ClientAppearance {
     private static final Map<UUID, View> VIEWS = new HashMap<>();
+    private static final Map<UUID, Long> REVISIONS = new HashMap<>();
+    private static final Deque<MemberEvent> PENDING = new ArrayDeque<>();
     private static ClientLevel level;
     private static long clock;
     private static LocalPlayer localPlayer;
     private static boolean localFlightApplied;
 
-    private record Member(UUID id, Mob entity) {}
+    private static final class Member {
+        final UUID id;
+        final Mob entity;
+        long eventSequence = -1;
+
+        Member(UUID id, Mob entity) { this.id = id; this.entity = entity; }
+    }
     private record View(int entityId, List<Member> members, int control, boolean flying, long received) {}
 
     private ClientAppearance() {}
 
     public static void receive(FusionAppearance packet) {
         checkLevel();
-        if (level == null) return;
+        if (level == null || packet.revision() <= REVISIONS.getOrDefault(packet.bodyId(), -1L)) return;
+        REVISIONS.put(packet.bodyId(), packet.revision());
+        View old = VIEWS.get(packet.bodyId());
         if (packet.members().isEmpty()) {
+            if (old != null) dispose(old);
             VIEWS.remove(packet.bodyId());
             return;
         }
-        View old = VIEWS.get(packet.bodyId());
-        Map<UUID, Mob> previous = new HashMap<>();
-        if (old != null) old.members.forEach(member -> previous.put(member.id, member.entity));
+        Map<UUID, Member> previous = new HashMap<>();
+        if (old != null) old.members.forEach(member -> previous.put(member.id, member));
         List<Member> members = new ArrayList<>();
-        for (FusionAppearance.Member member : packet.members()) {
-            Mob entity = previous.get(member.id());
-            if (entity == null || !BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).equals(member.type())) {
-                if (!(BuiltInRegistries.ENTITY_TYPE.get(member.type()).create(level) instanceof Mob created)) continue;
-                entity = created;
-                entity.setUUID(member.id());
+        for (FusionAppearance.Member state : packet.members()) {
+            Member member = previous.remove(state.id());
+            if (member != null && !BuiltInRegistries.ENTITY_TYPE.getKey(member.entity.getType()).equals(state.type())) {
+                ClientMemberEvents.dispose(member.entity);
+                member = null;
             }
-            entity.getEntityData().assignValues(member.data());
-            members.add(new Member(member.id(), entity));
+            boolean fresh = member == null;
+            if (fresh) {
+                if (!(BuiltInRegistries.ENTITY_TYPE.get(state.type()).create(level) instanceof Mob created)) continue;
+                created.setUUID(state.id());
+                DisplayExecution.register(created);
+                member = new Member(state.id(), created);
+            }
+            apply(member.entity, state.data(), fresh);
+            if (member.entity instanceof PresentationState presentation) presentation.cannedmonster$applyPresentation(state.presentation(), fresh);
+            members.add(member);
         }
+        previous.values().forEach(member -> ClientMemberEvents.dispose(member.entity));
         VIEWS.put(packet.bodyId(), new View(packet.entityId(), List.copyOf(members),
                 packet.control() >= 0 && packet.control() < members.size() ? packet.control() : -1,
                 packet.flying(), clock));
+    }
+
+    private static void apply(Mob entity, List<net.minecraft.network.syncher.SynchedEntityData.DataValue<?>> values, boolean fresh) {
+        var items = ((AppearanceData) entity.getEntityData()).cannedmonster$items();
+        List<net.minecraft.network.syncher.SynchedEntityData.DataValue<?>> changed = new ArrayList<>();
+        for (var value : values) {
+            var item = Arrays.stream(items).filter(candidate -> candidate.getAccessor().id() == value.id()).findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("Unknown display data accessor " + value.id()));
+            if (!Objects.equals(item.getAccessor().serializer(), value.serializer())) {
+                throw new IllegalArgumentException("Mismatched display data serializer " + value.id());
+            }
+            if (fresh || !Objects.equals(item.getValue(), value.value())) changed.add(value);
+        }
+        if (!changed.isEmpty()) DisplayExecution.run(entity, () -> entity.getEntityData().assignValues(changed));
+    }
+
+    public static void receive(MemberEvent packet) {
+        receive(packet.appearance());
+        if (!dispatch(packet)) {
+            if (PENDING.size() >= 256) PENDING.removeFirst();
+            PENDING.addLast(packet);
+        }
+    }
+
+    private static boolean dispatch(MemberEvent packet) {
+        View view = VIEWS.get(packet.appearance().bodyId());
+        if (view == null || view.entityId != packet.appearance().entityId()) return true;
+        var body = level.getEntity(view.entityId);
+        if (body == null) return false;
+        if (!(body instanceof LivingEntity living) || !body.getUUID().equals(packet.appearance().bodyId())) return true;
+        for (Member member : view.members) {
+            if (!member.id.equals(packet.member())) continue;
+            if (packet.sequence() <= member.eventSequence) return true;
+            member.eventSequence = packet.sequence();
+            pose(member.entity, living);
+            if (member.entity instanceof PresentationState state && state.cannedmonster$continuousEvent() == Byte.toUnsignedInt(packet.event())) {
+                ClientMemberEvents.continuous(member.entity, Byte.toUnsignedInt(packet.event()));
+            } else ClientMemberEvents.dispatch(member.entity, packet.event());
+            return true;
+        }
+        return true;
     }
 
     public static int controlIndex(Mob body) {
@@ -67,9 +126,30 @@ public final class ClientAppearance {
         VIEWS.entrySet().removeIf(entry -> {
             View view = entry.getValue();
             var body = level.getEntity(view.entityId);
-            return body == null ? clock - view.received > 100 : body.isRemoved() || !body.getUUID().equals(entry.getKey());
+            boolean expired = body == null ? clock - view.received > 100 : body.isRemoved() || !body.getUUID().equals(entry.getKey());
+            if (expired) dispose(view);
+            return expired;
         });
+        PENDING.removeIf(ClientAppearance::dispatch);
+        for (var entry : VIEWS.entrySet()) {
+            View view = entry.getValue();
+            if (!(level.getEntity(view.entityId) instanceof LivingEntity body) || !body.getUUID().equals(entry.getKey())) continue;
+            for (Member member : view.members) {
+                pose(member.entity, body);
+                DisplayExecution.run(member.entity, () -> {
+                    member.entity.tick();
+                    member.entity.aiStep();
+                });
+                pose(member.entity, body);
+                if (member.entity instanceof PresentationState state) ClientMemberEvents.continuous(member.entity, state.cannedmonster$continuousEvent());
+            }
+        }
+        ClientMemberEvents.prune();
         applyLocalGravity();
+    }
+
+    private static void dispose(View view) {
+        view.members.forEach(member -> ClientMemberEvents.dispose(member.entity));
     }
 
     private static void applyLocalGravity() {
@@ -84,8 +164,7 @@ public final class ClientAppearance {
             localPlayer = player;
             localFlightApplied = false;
         }
-        boolean flying = flying(player);
-        if (flying) {
+        if (flying(player)) {
             localFlightApplied = true;
             player.setNoGravity(true);
         } else if (localFlightApplied) {
@@ -100,16 +179,38 @@ public final class ClientAppearance {
             if (localPlayer != null && localFlightApplied) localPlayer.setNoGravity(false);
             localPlayer = null;
             localFlightApplied = false;
+            VIEWS.values().forEach(ClientAppearance::dispose);
             VIEWS.clear();
+            REVISIONS.clear();
+            PENDING.clear();
             level = current;
         }
+    }
+
+    public static List<LivingEntity> bodies() {
+        checkLevel();
+        if (level == null) return List.of();
+        List<LivingEntity> bodies = new ArrayList<>();
+        VIEWS.forEach((id, view) -> {
+            if (level.getEntity(view.entityId) instanceof LivingEntity body && body.getUUID().equals(id)) bodies.add(body);
+        });
+        return bodies;
+    }
+
+    public static LivingEntity bodyOf(Mob member) {
+        if (level == null) return null;
+        for (View view : VIEWS.values()) {
+            if (view.members.stream().anyMatch(value -> value.entity == member)
+                    && level.getEntity(view.entityId) instanceof LivingEntity body) return body;
+        }
+        return null;
     }
 
     public static List<Mob> members(LivingEntity body) {
         checkLevel();
         View view = VIEWS.get(body.getUUID());
         if (view == null || view.entityId != body.getId()) return List.of();
-        return view.members.stream().map(Member::entity).toList();
+        return view.members.stream().map(member -> member.entity).toList();
     }
 
     public static void pose(Mob member, LivingEntity body) {
@@ -136,9 +237,6 @@ public final class ClientAppearance {
         ((AppearanceWalk) member.walkAnimation).cannedmonster$copy(body.walkAnimation);
         member.setDeltaMovement(body.getDeltaMovement());
         member.setOnGround(body.onGround());
-        member.setPose(body.getPose());
-        member.setInvisible(body.isInvisible());
-        member.setGlowingTag(body.isCurrentlyGlowing());
         for (EquipmentSlot slot : EquipmentSlot.values()) member.setItemSlot(slot, body.getItemBySlot(slot).copy());
     }
 }

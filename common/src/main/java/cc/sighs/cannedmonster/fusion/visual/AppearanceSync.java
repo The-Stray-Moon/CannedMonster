@@ -17,6 +17,20 @@ import java.util.*;
 public final class AppearanceSync {
     private static final Map<LivingEntity, Composition> COMPOSITIONS = new IdentityHashMap<>();
     private record Composition(List<Mob> members, List<UUID> ids) {}
+    private static long revision;
+
+    public static boolean broadcast(net.minecraft.world.entity.Entity source, byte event) {
+        Object linked = cc.sighs.cannedmonster.fusion.BodyLinks.body(source);
+        if (linked == source || !(linked instanceof LivingEntity body) || source.level().isClientSide) return false;
+        FusionAppearance state = snapshot(body);
+        List<Mob> members = FusionRuntime.facets(body);
+        int index = members.indexOf(source);
+        if (index < 0) return true;
+        MemberEvent packet = new MemberEvent(state, state.members().get(index).id(), state.revision(), event);
+        PacketDistributor.sendToPlayersTrackingEntity(body, packet);
+        if (body instanceof ServerPlayer player) PacketDistributor.sendToPlayer(player, packet);
+        return true;
+    }
 
     private AppearanceSync() {}
 
@@ -50,11 +64,16 @@ public final class AppearanceSync {
         List<Mob> facets = FusionRuntime.facets(body);
         if (facets.isEmpty()) {
             COMPOSITIONS.remove(body);
-            return new FusionAppearance(body.getId(), body.getUUID(), -1, false, List.of());
+            return new FusionAppearance(body.getId(), body.getUUID(), -1, false, ++revision, List.of());
         }
         Composition composition = COMPOSITIONS.get(body);
         if (composition == null || !composition.members.equals(facets)) {
-            composition = new Composition(List.copyOf(facets), facets.stream().map(ignored -> UUID.randomUUID()).toList());
+            Map<Mob, UUID> previous = new IdentityHashMap<>();
+            if (composition != null) {
+                for (int i = 0; i < composition.members.size(); i++) previous.put(composition.members.get(i), composition.ids.get(i));
+            }
+            composition = new Composition(List.copyOf(facets), facets.stream()
+                    .map(member -> previous.getOrDefault(member, UUID.randomUUID())).toList());
             COMPOSITIONS.put(body, composition);
         }
         List<FusionAppearance.Member> members = new ArrayList<>();
@@ -62,11 +81,12 @@ public final class AppearanceSync {
             Mob facet = facets.get(i);
             List<net.minecraft.network.syncher.SynchedEntityData.DataValue<?>> values = new ArrayList<>();
             for (var item : ((AppearanceData) facet.getEntityData()).cannedmonster$items()) values.add(value(facet, item));
-            members.add(new FusionAppearance.Member(composition.ids.get(i), BuiltInRegistries.ENTITY_TYPE.getKey(facet.getType()), List.copyOf(values)));
+            members.add(new FusionAppearance.Member(composition.ids.get(i), BuiltInRegistries.ENTITY_TYPE.getKey(facet.getType()), List.copyOf(values),
+                    facet instanceof PresentationState state ? state.cannedmonster$capturePresentation() : new net.minecraft.nbt.CompoundTag()));
         }
         int control = body instanceof Mob mob ? FusionMotion.controlIndex(mob) : -1;
         return new FusionAppearance(body.getId(), body.getUUID(), control,
-                cc.sighs.cannedmonster.fusion.FlightRules.hasFlight(body), List.copyOf(members));
+                cc.sighs.cannedmonster.fusion.FlightRules.hasFlight(body), ++revision, List.copyOf(members));
     }
 
     private static <T> net.minecraft.network.syncher.SynchedEntityData.DataValue<T> value(

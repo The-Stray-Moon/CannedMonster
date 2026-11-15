@@ -15,6 +15,8 @@ import java.util.List;
 public final class FusionRenderer {
     private static LivingEntity body;
     private static MultiBufferSource originalBuffers;
+    private static boolean effects;
+    public static boolean effects() { return effects; }
     private static long renderedFrames;
     private static List<Integer> lastVertexCounts = List.of();
 
@@ -25,6 +27,32 @@ public final class FusionRenderer {
     public static MultiBufferSource baseBuffers(MultiBufferSource fallback) { return active() ? originalBuffers : fallback; }
     public static long renderedFrames() { return renderedFrames; }
     public static List<Integer> lastVertexCounts() { return lastVertexCounts; }
+
+    public static void renderEffects(LivingEntity host, float partialTick, PoseStack poses, MultiBufferSource buffers, int light) {
+        if (active()) return;
+        List<Mob> members = ClientAppearance.members(host);
+        if (members.isEmpty()) return;
+        body = host;
+        originalBuffers = buffers;
+        effects = true;
+        try {
+            for (Mob member : members) {
+                ClientAppearance.pose(member, host);
+                var renderer = Minecraft.getInstance().getEntityRenderDispatcher().getRenderer(member);
+                if (renderer instanceof MemberEffectRenderer effect) {
+                    poses.pushPose();
+                    try { effect.cannedmonster$effects(member, host.getYRot(), partialTick, poses, buffers, light); }
+                    finally { poses.popPose(); }
+                }
+            }
+            var renderer = Minecraft.getInstance().getEntityRenderDispatcher().getRenderer(host);
+            if (renderer instanceof MemberEffectRenderer effect) effect.cannedmonster$effects(host, host.getYRot(), partialTick, poses, buffers, light);
+        } finally {
+            effects = false;
+            body = null;
+            originalBuffers = null;
+        }
+    }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
     public static void render(EntityRenderer renderer, Entity entity, float yaw, float partialTick,

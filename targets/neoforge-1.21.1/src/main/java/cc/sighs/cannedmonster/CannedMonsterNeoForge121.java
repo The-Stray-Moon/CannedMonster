@@ -28,13 +28,17 @@ public final class CannedMonsterNeoForge121 {
         modBus.addListener((net.neoforged.fml.event.config.ModConfigEvent.Reloading event) -> FlightConfig.apply(event));
         CanRegistration.register(modBus);
         modBus.addListener((net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent event) ->
-                event.registrar("1").playToClient(cc.sighs.cannedmonster.fusion.visual.FusionAppearance.TYPE,
+                event.registrar("2").playToClient(cc.sighs.cannedmonster.fusion.visual.FusionAppearance.TYPE,
                         cc.sighs.cannedmonster.fusion.visual.FusionAppearance.CODEC,
                         (packet, context) -> cc.sighs.cannedmonster.fusion.visual.ClientAppearance.receive(packet)));
         modBus.addListener((net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent event) ->
-                event.registrar("1").playToClient(cc.sighs.cannedmonster.fusion.RidingState.TYPE,
+                event.registrar("2").playToClient(cc.sighs.cannedmonster.fusion.RidingState.TYPE,
                         cc.sighs.cannedmonster.fusion.RidingState.CODEC,
                         (packet, context) -> cc.sighs.cannedmonster.fusion.visual.ClientRiding.receive(packet)));
+        modBus.addListener((net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent event) ->
+                event.registrar("2").playToClient(cc.sighs.cannedmonster.fusion.visual.MemberEvent.TYPE,
+                        cc.sighs.cannedmonster.fusion.visual.MemberEvent.CODEC,
+                        (packet, context) -> cc.sighs.cannedmonster.fusion.visual.ClientAppearance.receive(packet)));
         NeoForge.EVENT_BUS.addListener(cc.sighs.cannedmonster.fusion.RidingState::tick);
         NeoForge.EVENT_BUS.addListener(cc.sighs.cannedmonster.fusion.FusionPursuit::tick);
         NeoForge.EVENT_BUS.addListener(cc.sighs.cannedmonster.fusion.PlayerFusion::clone);

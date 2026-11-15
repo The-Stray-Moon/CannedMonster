@@ -60,6 +60,11 @@ public abstract class PlayerMemberMobMixin {
         if (player != null && target != null && !cc.sighs.cannedmonster.fusion.FusionTraits.allowedTarget(player, target)) ci.cancel();
     }
 
+    @Inject(method = "setTarget", at = @At("RETURN"))
+    private void cannedmonster$targetReset(LivingEntity target, CallbackInfo ci) {
+        if (target == null) cc.sighs.cannedmonster.fusion.TargetResets.cleared((Mob) (Object) this);
+    }
+
     @Inject(method = "doHurtTarget", at = @At("HEAD"), cancellable = true)
     private void cannedmonster$attack(Entity target, CallbackInfoReturnable<Boolean> cir) {
         Player player = cannedmonster$player();

@@ -1,6 +1,7 @@
 package cc.sighs.cannedmonster.fusion.visual;
 
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -11,29 +12,29 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-public record FusionAppearance(int entityId, UUID bodyId, int control, boolean flying, List<Member> members) implements CustomPacketPayload {
+public record FusionAppearance(int entityId, UUID bodyId, int control, boolean flying, long revision, List<Member> members) implements CustomPacketPayload {
     public static final Type<FusionAppearance> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath("cannedmonster", "appearance"));
     public static final StreamCodec<RegistryFriendlyByteBuf, FusionAppearance> CODEC = StreamCodec.of(
             FusionAppearance::write, FusionAppearance::read);
 
-    public record Member(UUID id, ResourceLocation type, List<SynchedEntityData.DataValue<?>> data) {}
+    public record Member(UUID id, ResourceLocation type, List<SynchedEntityData.DataValue<?>> data, CompoundTag presentation) {}
 
     @Override
-    public Type<? extends CustomPacketPayload> type() {
-        return TYPE;
-    }
+    public Type<? extends CustomPacketPayload> type() { return TYPE; }
 
     private static void write(RegistryFriendlyByteBuf buffer, FusionAppearance appearance) {
         buffer.writeVarInt(appearance.entityId);
         buffer.writeUUID(appearance.bodyId);
         buffer.writeVarInt(appearance.control);
-        buffer.writeBoolean(appearance.flying());
+        buffer.writeBoolean(appearance.flying);
+        buffer.writeVarLong(appearance.revision);
         buffer.writeVarInt(appearance.members.size());
         for (Member member : appearance.members) {
             buffer.writeUUID(member.id);
             buffer.writeResourceLocation(member.type);
             buffer.writeVarInt(member.data.size());
             member.data.forEach(value -> value.write(buffer));
+            buffer.writeNbt(member.presentation);
         }
     }
 
@@ -42,6 +43,7 @@ public record FusionAppearance(int entityId, UUID bodyId, int control, boolean f
         UUID bodyId = buffer.readUUID();
         int control = buffer.readVarInt();
         boolean flying = buffer.readBoolean();
+        long revision = buffer.readVarLong();
         int count = bounded(buffer.readVarInt(), 4096);
         List<Member> members = new ArrayList<>(count);
         for (int i = 0; i < count; i++) {
@@ -51,9 +53,10 @@ public record FusionAppearance(int entityId, UUID bodyId, int control, boolean f
             int size = bounded(buffer.readVarInt(), 255);
             List<SynchedEntityData.DataValue<?>> data = new ArrayList<>(size);
             for (int j = 0; j < size; j++) data.add(SynchedEntityData.DataValue.read(buffer, buffer.readUnsignedByte()));
-            members.add(new Member(id, type, List.copyOf(data)));
+            CompoundTag presentation = buffer.readNbt();
+            members.add(new Member(id, type, List.copyOf(data), presentation == null ? new CompoundTag() : presentation));
         }
-        return new FusionAppearance(entityId, bodyId, control >= count ? -1 : control, flying, List.copyOf(members));
+        return new FusionAppearance(entityId, bodyId, control >= count ? -1 : control, flying, revision, List.copyOf(members));
     }
 
     private static int bounded(int value, int max) {

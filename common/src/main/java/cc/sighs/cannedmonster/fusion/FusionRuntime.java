@@ -196,8 +196,15 @@ public final class FusionRuntime {
         if (!facet.level().isClientSide && facet.isAlive() && !facet.isNoAi()) {
             if (BodyLinks.body(facet) instanceof Player player) {
                 LivingEntity target = FusionTraits.gazeTarget(player);
-                facet.setTarget(target);
-                facet.getBrain().setMemory(net.minecraft.world.entity.ai.memory.MemoryModuleType.ATTACK_TARGET, target);
+                LivingEntity previous = facet.getTarget();
+                if (previous != null && previous != target) {
+                    facet.setTarget(null);
+                    facet.getBrain().eraseMemory(net.minecraft.world.entity.ai.memory.MemoryModuleType.ATTACK_TARGET);
+                }
+                if (!TargetResets.begin(facet)) {
+                    facet.setTarget(target);
+                    facet.getBrain().setMemory(net.minecraft.world.entity.ai.memory.MemoryModuleType.ATTACK_TARGET, target);
+                }
             }
             ((NativeMobAccess) facet).cannedmonster$serverAiStep();
         }

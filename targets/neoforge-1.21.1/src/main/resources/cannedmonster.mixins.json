@@ -6,9 +6,9 @@
   "mixins": ["MobAccess", "LivingEntityAccess", "AttributeMapAccess", "MobInteractionMixin", "EntitySaveMixin",
     "PlayerInteractionMixin", "TargetingIdentityMixin", "TargetingGazeMixin", "ProjectileIdentityMixin", "QueryIdentityMixin",
     "DamageIdentityMixin", "SpawnInheritanceMixin", "AppearanceDataAccess", "FoodOnAStickMixin",
-    "LivingLootAccess", "FusionLootMixin", "FusionEquipmentLootMixin",
+    "LivingLootAccess", "FusionLootMixin", "FusionEquipmentLootMixin", "MemberEventMixin", "DisplayMobMixin", "DisplayEntityMixin", "GuardianAttackClockMixin", "GuardianPresentationMixin", "MemberGoalResetMixin",
     "EntityTeleportMixin", "LivingEntityTeleportMixin", "ShulkerTeleportMixin",
-    "RidingPhysicsMixin", "RidingEntityMixin", "RidingNetworkMixin", "NavigationQueryMixin", "PursuitTravelMixin", "FusionPhysiologyMixin", "PlayerBodyGuardMixin", "PlayerMemberMobMixin", "FusionAttributeWriteMixin", "PlayerMemberBrainMixin", "PlayerFusionLogoutMixin"],
-  "client": ["AppearanceWalkMixin", "FusionRenderDispatcherMixin", "FusionEntityRendererMixin", "PlayerFlightMoveMixin"],
+    "RidingPhysicsMixin", "RidingEntityMixin", "RidingNetworkMixin", "NavigationQueryMixin", "PursuitTravelMixin", "FusionPhysiologyMixin", "PlayerBodyGuardMixin", "PlayerMemberRotationMixin", "PlayerMemberLookMixin", "PlayerMemberMobMixin", "FusionAttributeWriteMixin", "PlayerMemberBrainMixin", "PlayerFusionLogoutMixin"],
+  "client": ["AppearanceWalkMixin", "FusionRenderDispatcherMixin", "FusionEntityRendererMixin", "PlayerFlightMoveMixin", "ClientMemberEventMixin", "MemberSoundMixin", "GuardianEffectMixin", "MemberModelPassMixin"],
   "injectors": { "defaultRequire": 1 }
 }

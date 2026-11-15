@@ -28,6 +28,24 @@ public final class FusionClientEvents {
     }
 
     @SubscribeEvent
+    public static void effects(net.neoforged.neoforge.client.event.RenderLevelStageEvent event) {
+        if (event.getStage() != net.neoforged.neoforge.client.event.RenderLevelStageEvent.Stage.AFTER_ENTITIES) return;
+        var minecraft = net.minecraft.client.Minecraft.getInstance();
+        var camera = event.getCamera().getPosition();
+        var poses = event.getPoseStack();
+        float partialTick = event.getPartialTick().getGameTimeDeltaPartialTick(false);
+        var buffers = minecraft.renderBuffers().bufferSource();
+        for (var body : ClientAppearance.bodies()) {
+            var position = body.getPosition(partialTick);
+            poses.pushPose();
+            try {
+                poses.translate(position.x - camera.x, position.y - camera.y, position.z - camera.z);
+                cc.sighs.cannedmonster.fusion.visual.FusionRenderer.renderEffects(body, partialTick, poses, buffers, 15728880);
+            } finally { poses.popPose(); }
+        }
+    }
+
+    @SubscribeEvent
     public static void tick(ClientTickEvent.Post event) {
         ClientAppearance.tick();
         ClientRiding.tick();
