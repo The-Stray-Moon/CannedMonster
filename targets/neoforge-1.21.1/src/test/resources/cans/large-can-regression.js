@@ -1,0 +1,26 @@
+var LF=Java.loadClass('cc.sighs.cannedmonster.fusion.FusionRuntime');
+var LC=Java.loadClass('cc.sighs.cannedmonster.can.CanContents');
+var LP=Java.loadClass('cc.sighs.cannedmonster.fusion.PlayerFusion');
+var LA=Java.loadClass('cc.sighs.cannedmonster.can.CanActions');
+var LT=Java.loadClass('net.minecraft.world.entity.EntityType');
+var LL=Java.loadClass('java.util.List');
+var LN=Java.loadClass('net.minecraft.nbt.CompoundTag');
+var LH=Java.loadClass('net.minecraft.world.InteractionHand');
+var LV=Java.loadClass('net.minecraft.world.phys.Vec3');
+var lp=AutoJS.player(),lw=AutoJS.level(),largeChecks=[];
+function largeCheck(name,value){largeChecks.push({name:name,pass:!!value});if(!value)throw new Error(name);}
+var largeSaved=new LN();LF.save(lp,largeSaved);
+var largeHeld=lp.getItemInHand(LH.MAIN_HAND).copy();
+while(!LF.facets(lp).isEmpty())LF.peel(lp);
+var largeBase=lp.getMaxHealth();
+var largeCow=LT.COW.create(lw),largePig=LT.PIG.create(lw),largeSheep=LT.SHEEP.create(lw);
+LF.attach(lp,LL.of(largeCow,largePig,largeSheep));
+var largeCan=AutoJS.stack('cannedmonster:large_monster_can',1);
+largeCheck('large extraction succeeds',LP.extract(lp,largeCan));
+largeCheck('all members removed from player',LF.facets(lp).isEmpty());
+largeCheck('large can counts all mobs',LC.count(largeCan)===3);
+largeCheck('large can hover name shows count',String(largeCan.getHoverName().getString()).indexOf('3')>=0);
+largeCheck('large can stores two nested members',LF.memberCount(LC.entity(largeCan))===3);
+largeCheck('player attributes restored',Math.abs(lp.getMaxHealth()-largeBase)<1e-4);
+lp.setItemInHand(LH.MAIN_HAND,largeCan);
+JSON.stringify({checks:largeChecks,count:LC.count(largeCan),name:String(largeCan.getHoverName().getString()),playerMax:lp.getMaxHealth()});

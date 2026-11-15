@@ -39,7 +39,7 @@ public final class CanActions {
                 CompoundTag data = target.saveWithoutId(new CompoundTag());
                 data.putString("id", BuiltInRegistries.ENTITY_TYPE.getKey(target.getType()).toString());
                 ItemStack prepared = stack.copyWithCount(1);
-                CanContents.store(prepared, data, target.getName().getString());
+                CanContents.store(prepared, data, target.getName().getString(), FusionRuntime.memberCount(data));
                 target.setRemoved(Entity.RemovalReason.DISCARDED);
                 stack.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA, prepared.get(net.minecraft.core.component.DataComponents.CUSTOM_DATA));
                 return true;

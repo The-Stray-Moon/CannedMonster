@@ -257,6 +257,42 @@ public final class FusionRuntime {
         return tag;
     }
 
+    public static CompoundTag packAll(Player player) {
+        List<Mob> members = facets(player);
+        if (members.isEmpty()) throw new IllegalArgumentException("No fusion members to pack");
+        var origins = originsOf(player);
+        if (members.size() == 1) return independentSave(members.getFirst());
+        CompoundTag body = independentSave(members.getLast());
+        CompoundTag fusion = new CompoundTag();
+        fusion.putInt("Version", 2);
+        fusion.put("AttributeOrigins", AttributeAverages.save(origins.subList(0, members.size())));
+        ListTag list = new ListTag();
+        for (int i = 0; i < members.size() - 1; i++) {
+            CompoundTag member = independentSave(members.get(i));
+            member.remove("UUID");
+            list.add(member);
+        }
+        fusion.put("Members", list);
+        body.put(SAVE_KEY, fusion);
+        return body;
+    }
+
+    public static int memberCount(CompoundTag entity) {
+        CompoundTag fusion = entity.getCompound(SAVE_KEY);
+        return 1 + (fusion.contains("Members", Tag.TAG_LIST) ? fusion.getList("Members", Tag.TAG_COMPOUND).size() : 0);
+    }
+
+    public static void stripAll(Player player) {
+        List<Map<ResourceLocation, Double>> origins = originsOf(player);
+        if (facets(player).isEmpty()) return;
+        detach(player);
+        try {
+            AttributeAverages.apply(player, List.of(origins.getLast()), Set.of(PlayerSpeed.ATTRIBUTE));
+        } catch (RuntimeException failure) {
+            com.mojang.logging.LogUtils.getLogger().error("Cannot restore player attributes after extracting all members", failure);
+        }
+    }
+
     public static void load(Entity entity, CompoundTag tag) {
         if (!(entity instanceof LivingEntity host) || host.level().isClientSide || !tag.contains(SAVE_KEY, Tag.TAG_COMPOUND)) return;
         CompoundTag fusion = tag.getCompound(SAVE_KEY);

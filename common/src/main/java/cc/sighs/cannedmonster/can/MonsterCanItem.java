@@ -169,6 +169,17 @@ public final class MonsterCanItem extends Item {
     public boolean isFoil(ItemStack stack) { return CanContents.filled(stack) || super.isFoil(stack); }
 
     @Override
+    public Component getName(ItemStack stack) {
+        Component base = super.getName(stack);
+        if (!CanContents.filled(stack)) return base;
+        if (storesFusion()) {
+            return Component.translatable("item.cannedmonster.with_count", base, CanContents.count(stack));
+        }
+        String name = CanContents.name(stack);
+        return name.isEmpty() ? base : Component.translatable("item.cannedmonster.with_name", base, name);
+    }
+
+    @Override
     public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
         if (spatial) {
             tooltip.add(Component.translatable("tooltip.cannedmonster.spatial_pending").withStyle(ChatFormatting.GRAY));
@@ -177,12 +188,19 @@ public final class MonsterCanItem extends Item {
         if (random) {
             tooltip.add(Component.translatable("tooltip.cannedmonster.random").withStyle(ChatFormatting.LIGHT_PURPLE));
         } else {
-            tooltip.add(CanContents.filled(stack)
-                    ? Component.translatable("tooltip.cannedmonster.contains", CanContents.name(stack)).withStyle(ChatFormatting.GOLD)
-                    : Component.translatable("tooltip.cannedmonster.empty").withStyle(ChatFormatting.GRAY));
+            if (CanContents.filled(stack)) {
+                tooltip.add(large
+                        ? Component.translatable("tooltip.cannedmonster.contains_count", CanContents.count(stack)).withStyle(ChatFormatting.GOLD)
+                        : Component.translatable("tooltip.cannedmonster.contains", CanContents.name(stack)).withStyle(ChatFormatting.GOLD));
+            } else {
+                tooltip.add(Component.translatable("tooltip.cannedmonster.empty").withStyle(ChatFormatting.GRAY));
+            }
             tooltip.add(Component.translatable(large ? "tooltip.cannedmonster.large" : "tooltip.cannedmonster.small").withStyle(ChatFormatting.GRAY));
-            if (!throwable) tooltip.add(Component.translatable("tooltip.cannedmonster.eat").withStyle(ChatFormatting.GRAY));
+            if (!throwable) tooltip.add(Component.translatable(large
+                    ? "tooltip.cannedmonster.eat_large" : "tooltip.cannedmonster.eat").withStyle(ChatFormatting.GRAY));
         }
-        tooltip.add(Component.translatable(throwable ? "tooltip.cannedmonster.throw" : "tooltip.cannedmonster.hand").withStyle(ChatFormatting.GRAY));
+        tooltip.add(Component.translatable(throwable
+                ? "tooltip.cannedmonster.throw"
+                : large ? "tooltip.cannedmonster.hand_large" : "tooltip.cannedmonster.hand").withStyle(ChatFormatting.GRAY));
     }
 }

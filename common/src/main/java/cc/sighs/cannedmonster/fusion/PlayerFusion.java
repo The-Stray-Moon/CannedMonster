@@ -51,11 +51,18 @@ public final class PlayerFusion {
 
     public static boolean extract(Player player, ItemStack stack) {
         if (!valid(player, stack) || CanContents.filled(stack) || facets(player).isEmpty()) return false;
-        Mob member = facets(player).getFirst();
+        MonsterCanItem item = (MonsterCanItem) stack.getItem();
         try {
             ItemStack prepared = stack.copyWithCount(1);
-            CanContents.store(prepared, FusionRuntime.independentSave(member), member.getName().getString());
-            FusionRuntime.peel(player);
+            if (item.storesFusion()) {
+                List<Mob> members = facets(player);
+                CanContents.store(prepared, FusionRuntime.packAll(player), "", members.size());
+                FusionRuntime.stripAll(player);
+            } else {
+                Mob member = facets(player).getFirst();
+                CanContents.store(prepared, FusionRuntime.independentSave(member), member.getName().getString(), 1);
+                FusionRuntime.peel(player);
+            }
             stack.set(DataComponents.CUSTOM_DATA, prepared.get(DataComponents.CUSTOM_DATA));
             return true;
         } catch (RuntimeException failure) {

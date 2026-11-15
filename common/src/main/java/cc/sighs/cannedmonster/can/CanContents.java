@@ -29,11 +29,24 @@ public final class CanContents {
         return stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag().getCompound(KEY).getString("Name");
     }
 
+    public static int count(ItemStack stack) {
+        CompoundTag contents = stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag().getCompound(KEY);
+        if (contents.contains("Count")) return Math.max(1, contents.getInt("Count"));
+        CompoundTag fusion = contents.getCompound("Entity").getCompound("cannedmonster:fusion");
+        return 1 + (fusion.contains("Members", net.minecraft.nbt.Tag.TAG_LIST)
+                ? fusion.getList("Members", net.minecraft.nbt.Tag.TAG_COMPOUND).size() : 0);
+    }
+
     public static void store(ItemStack stack, CompoundTag entity, String name) {
+        store(stack, entity, name, 1);
+    }
+
+    public static void store(ItemStack stack, CompoundTag entity, String name, int count) {
         CompoundTag contents = new CompoundTag();
         contents.putInt("Version", 1);
         contents.put("Entity", entity.copy());
         contents.putString("Name", name);
+        contents.putInt("Count", Math.max(1, count));
         validate(contents, 0);
         try {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
