@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-public record FusionAppearance(int entityId, UUID bodyId, int control, List<Member> members) implements CustomPacketPayload {
+public record FusionAppearance(int entityId, UUID bodyId, int control, boolean flying, List<Member> members) implements CustomPacketPayload {
     public static final Type<FusionAppearance> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath("cannedmonster", "appearance"));
     public static final StreamCodec<RegistryFriendlyByteBuf, FusionAppearance> CODEC = StreamCodec.of(
             FusionAppearance::write, FusionAppearance::read);
@@ -27,6 +27,7 @@ public record FusionAppearance(int entityId, UUID bodyId, int control, List<Memb
         buffer.writeVarInt(appearance.entityId);
         buffer.writeUUID(appearance.bodyId);
         buffer.writeVarInt(appearance.control);
+        buffer.writeBoolean(appearance.flying());
         buffer.writeVarInt(appearance.members.size());
         for (Member member : appearance.members) {
             buffer.writeUUID(member.id);
@@ -40,6 +41,7 @@ public record FusionAppearance(int entityId, UUID bodyId, int control, List<Memb
         int entityId = buffer.readVarInt();
         UUID bodyId = buffer.readUUID();
         int control = buffer.readVarInt();
+        boolean flying = buffer.readBoolean();
         int count = bounded(buffer.readVarInt(), 4096);
         List<Member> members = new ArrayList<>(count);
         for (int i = 0; i < count; i++) {
@@ -51,7 +53,7 @@ public record FusionAppearance(int entityId, UUID bodyId, int control, List<Memb
             for (int j = 0; j < size; j++) data.add(SynchedEntityData.DataValue.read(buffer, buffer.readUnsignedByte()));
             members.add(new Member(id, type, List.copyOf(data)));
         }
-        return new FusionAppearance(entityId, bodyId, control >= count ? -1 : control, List.copyOf(members));
+        return new FusionAppearance(entityId, bodyId, control >= count ? -1 : control, flying, List.copyOf(members));
     }
 
     private static int bounded(int value, int max) {

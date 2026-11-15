@@ -50,7 +50,7 @@ public final class AppearanceSync {
         List<Mob> facets = FusionRuntime.facets(body);
         if (facets.isEmpty()) {
             COMPOSITIONS.remove(body);
-            return new FusionAppearance(body.getId(), body.getUUID(), -1, List.of());
+            return new FusionAppearance(body.getId(), body.getUUID(), -1, false, List.of());
         }
         Composition composition = COMPOSITIONS.get(body);
         if (composition == null || !composition.members.equals(facets)) {
@@ -65,7 +65,8 @@ public final class AppearanceSync {
             members.add(new FusionAppearance.Member(composition.ids.get(i), BuiltInRegistries.ENTITY_TYPE.getKey(facet.getType()), List.copyOf(values)));
         }
         int control = body instanceof Mob mob ? FusionMotion.controlIndex(mob) : -1;
-        return new FusionAppearance(body.getId(), body.getUUID(), control, List.copyOf(members));
+        return new FusionAppearance(body.getId(), body.getUUID(), control,
+                cc.sighs.cannedmonster.fusion.FlightRules.hasFlight(body), List.copyOf(members));
     }
 
     private static <T> net.minecraft.network.syncher.SynchedEntityData.DataValue<T> value(

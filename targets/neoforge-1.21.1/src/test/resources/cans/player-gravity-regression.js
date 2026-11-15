@@ -1,0 +1,21 @@
+var TF=Java.loadClass('cc.sighs.cannedmonster.fusion.FusionRuntime');
+var TE=Java.loadClass('net.minecraft.world.entity.EntityType');
+var TL=Java.loadClass('java.util.List');
+var tp=AutoJS.player(),tw=AutoJS.level(),checks=[];
+function check(name,value){checks.push({name:name,pass:!!value});if(!value)throw new Error(name);}
+if(!tp.isAlive()||tp.isRemoved())throw new Error('Respawn the test player before running this suite');
+while(!TF.facets(tp).isEmpty())TF.peel(tp);
+tp.setNoGravity(false);
+check('baseline gravity enabled',!tp.isNoGravity());
+var member=TE.VEX.create(tw);
+TF.attach(tp,TL.of(member));
+check('attached body keeps gravity enabled',!tp.isNoGravity());
+member.setNoGravity(true);
+check('member gravity write does not reach the body',!tp.isNoGravity());
+TF.peel(tp);
+check('peel leaves gravity enabled',!tp.isNoGravity());
+tp.setNoGravity(true);
+check('body can still change its own gravity',tp.isNoGravity());
+tp.setNoGravity(false);
+check('body gravity restore works',!tp.isNoGravity());
+JSON.stringify({checks:checks});

@@ -90,13 +90,17 @@ public final class FusionRuntime {
                 mob.setPersistenceRequired();
             }
             OrderedCalls.bind(host, facets, FusionRuntime::aiBoundary);
+            if (host instanceof Player player) FlightRules.refresh(player);
         } catch (RuntimeException exception) {
             OrderedCalls.unbind(host);
             SESSIONS.remove(host);
             ATTRIBUTE_ORIGINS.remove(host);
             BodyLinks.session(host, null);
             bound.forEach(facet -> BodyLinks.unbind(facet, facet.getEntityData()));
-            if (host instanceof Player player) PlayerSpeed.clear(player);
+            if (host instanceof Player player) {
+                PlayerSpeed.clear(player);
+                FlightRules.clear(player);
+            }
             try { originalState.restore(host); }
             catch (RuntimeException rollback) { exception.addSuppressed(rollback); }
             throw exception;
@@ -222,6 +226,9 @@ public final class FusionRuntime {
             members.add(member);
         }
         fusion.put("Members", members);
+        if (host instanceof Player player && FlightRules.applied(player)) {
+            tag.putBoolean("NoGravity", false);
+        }
         tag.put(SAVE_KEY, fusion);
     }
 
@@ -265,6 +272,9 @@ public final class FusionRuntime {
             }
             var origins = version == 2 ? AttributeAverages.load(fusion.getList("AttributeOrigins", Tag.TAG_COMPOUND), restored.size() + 1) : null;
             detach(host);
+            if (host instanceof Player player && fusion.contains("OriginalNoGravity")) {
+                player.setNoGravity(false);
+            }
             if (origins == null) attach(host, restored);
             else attach(host, restored, origins);
             if (host instanceof Player player) PlayerFusion.resolved(player);
@@ -275,7 +285,10 @@ public final class FusionRuntime {
     }
 
     public static void detach(LivingEntity host) {
-        if (host instanceof Player player) PlayerSpeed.clear(player);
+        if (host instanceof Player player) {
+            PlayerSpeed.clear(player);
+            FlightRules.clear(player);
+        }
         ATTRIBUTE_ORIGINS.remove(host);
         OrderedCalls.unbind(host);
         BodyLinks.session(host, null);
@@ -283,10 +296,19 @@ public final class FusionRuntime {
         if (facets != null) facets.forEach(facet -> BodyLinks.unbind(facet, facet.getEntityData()));
     }
 
+    public static void refreshFlights() {
+        List<LivingEntity> hosts;
+        synchronized (SESSIONS) { hosts = List.copyOf(SESSIONS.keySet()); }
+        for (LivingEntity host : hosts) {
+            if (host instanceof Player player) FlightRules.refresh(player);
+        }
+    }
+
     public static void clear() {
         List<LivingEntity> hosts;
         synchronized (SESSIONS) { hosts = List.copyOf(SESSIONS.keySet()); }
         hosts.forEach(FusionRuntime::detach);
+        FlightRules.clearAll();
         PlayerFusion.clear();
         RidingState.clear();
         FusionGaze.clear();

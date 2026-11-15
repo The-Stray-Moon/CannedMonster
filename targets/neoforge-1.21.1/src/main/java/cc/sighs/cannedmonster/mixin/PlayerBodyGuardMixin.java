@@ -43,7 +43,7 @@ public abstract class PlayerBodyGuardMixin {
         if (FusionTraits.playerMember(entity) || FusionTraits.autonomous(entity)) ci.cancel();
     }
 
-    @Inject(method = {"setDeltaMovement(Lnet/minecraft/world/phys/Vec3;)V", "setRemoved"},
+    @Inject(method = {"setDeltaMovement(Lnet/minecraft/world/phys/Vec3;)V", "setRemoved", "setNoGravity(Z)V"},
             at = @At("HEAD"), cancellable = true)
     private void cannedmonster$state(CallbackInfo ci) {
         Entity entity = (Entity) (Object) this;

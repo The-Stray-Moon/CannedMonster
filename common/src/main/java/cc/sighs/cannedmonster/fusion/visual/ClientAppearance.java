@@ -2,6 +2,7 @@ package cc.sighs.cannedmonster.fusion.visual;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
@@ -13,9 +14,11 @@ public final class ClientAppearance {
     private static final Map<UUID, View> VIEWS = new HashMap<>();
     private static ClientLevel level;
     private static long clock;
+    private static LocalPlayer localPlayer;
+    private static boolean localFlightApplied;
 
     private record Member(UUID id, Mob entity) {}
-    private record View(int entityId, List<Member> members, int control, long received) {}
+    private record View(int entityId, List<Member> members, int control, boolean flying, long received) {}
 
     private ClientAppearance() {}
 
@@ -41,13 +44,20 @@ public final class ClientAppearance {
             members.add(new Member(member.id(), entity));
         }
         VIEWS.put(packet.bodyId(), new View(packet.entityId(), List.copyOf(members),
-                packet.control() >= 0 && packet.control() < members.size() ? packet.control() : -1, clock));
+                packet.control() >= 0 && packet.control() < members.size() ? packet.control() : -1,
+                packet.flying(), clock));
     }
 
     public static int controlIndex(Mob body) {
         checkLevel();
         View view = VIEWS.get(body.getUUID());
         return view == null || view.entityId != body.getId() ? -1 : view.control();
+    }
+
+    public static boolean flying(LivingEntity body) {
+        checkLevel();
+        View view = VIEWS.get(body.getUUID());
+        return view != null && view.entityId == body.getId() && view.flying;
     }
 
     public static void tick() {
@@ -59,11 +69,37 @@ public final class ClientAppearance {
             var body = level.getEntity(view.entityId);
             return body == null ? clock - view.received > 100 : body.isRemoved() || !body.getUUID().equals(entry.getKey());
         });
+        applyLocalGravity();
+    }
+
+    private static void applyLocalGravity() {
+        var player = Minecraft.getInstance().player;
+        if (player == null) {
+            localFlightApplied = false;
+            localPlayer = null;
+            return;
+        }
+        if (player != localPlayer) {
+            if (localPlayer != null && localFlightApplied) localPlayer.setNoGravity(false);
+            localPlayer = player;
+            localFlightApplied = false;
+        }
+        boolean flying = flying(player);
+        if (flying) {
+            localFlightApplied = true;
+            player.setNoGravity(true);
+        } else if (localFlightApplied) {
+            player.setNoGravity(false);
+            localFlightApplied = false;
+        }
     }
 
     private static void checkLevel() {
         ClientLevel current = Minecraft.getInstance().level;
         if (level != current) {
+            if (localPlayer != null && localFlightApplied) localPlayer.setNoGravity(false);
+            localPlayer = null;
+            localFlightApplied = false;
             VIEWS.clear();
             level = current;
         }

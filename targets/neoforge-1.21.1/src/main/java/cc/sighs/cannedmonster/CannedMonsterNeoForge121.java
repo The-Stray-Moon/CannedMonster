@@ -22,7 +22,10 @@ public final class CannedMonsterNeoForge121 {
     public static final String MOD_ID = "cannedmonster";
     private static final DynamicCommandExceptionType ERROR = new DynamicCommandExceptionType(message -> Component.literal(String.valueOf(message)));
 
-    public CannedMonsterNeoForge121(net.neoforged.bus.api.IEventBus modBus) {
+    public CannedMonsterNeoForge121(net.neoforged.bus.api.IEventBus modBus, net.neoforged.fml.ModContainer container) {
+        container.registerConfig(net.neoforged.fml.config.ModConfig.Type.COMMON, FlightConfig.SPEC);
+        modBus.addListener((net.neoforged.fml.event.config.ModConfigEvent.Loading event) -> FlightConfig.apply(event));
+        modBus.addListener((net.neoforged.fml.event.config.ModConfigEvent.Reloading event) -> FlightConfig.apply(event));
         CanRegistration.register(modBus);
         modBus.addListener((net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent event) ->
                 event.registrar("1").playToClient(cc.sighs.cannedmonster.fusion.visual.FusionAppearance.TYPE,

@@ -4,11 +4,13 @@ var TG=Java.loadClass('cc.sighs.cannedmonster.fusion.FusionGaze');
 var TE=Java.loadClass('net.minecraft.world.entity.EntityType');
 var TL=Java.loadClass('java.util.List');
 var TM=Java.loadClass('net.minecraft.world.entity.ai.memory.MemoryModuleType');
+var TS=Java.loadClass('net.minecraft.world.entity.ai.sensing.Sensor');
 var tp=AutoJS.player(),tw=AutoJS.level(),targetChecks=[],targetPhase='setup',targetTick=0,targetError=null;
 function targetCheck(name,value){targetChecks.push({name:name,pass:!!value});if(!value)throw new Error(name);}
 if(!tp.isAlive()||tp.isRemoved())throw new Error('Respawn the test player before running this suite');
 while(!TF.facets(tp).isEmpty())TF.peel(tp);
-var targetMember=TE.PIGLIN_BRUTE.create(tw);TF.attach(tp,TL.of(targetMember));
+var targetMember=TE.PIGLIN_BRUTE.create(tw),targetBreeze=TE.BREEZE.create(tw);
+TF.attach(tp,TL.of(targetMember,targetBreeze));
 var allowedVictim=TE.COW.create(tw),foreignVictim=TE.COW.create(tw);
 var targetBrain=targetMember.getBrain();
 function targetPlace(victim,sign){
@@ -38,6 +40,9 @@ targetBrain.setMemory(TM.ATTACK_TARGET,allowedVictim);
 targetCheck('gaze Mob target is retained',targetMember.getTarget()===allowedVictim);
 targetCheck('gaze Brain target is retained',targetBrain.getMemory(TM.ATTACK_TARGET).get()===allowedVictim);
 targetCheck('non-gaze melee action is refused',!targetMember.doHurtTarget(foreignVictim));
+targetCheck('native breeze still excludes cows',!targetBreeze.canAttackType(TE.COW));
+targetBreeze.getBrain().setMemory(TM.ATTACK_TARGET,allowedVictim);
+targetCheck('gaze type passes breeze target validation',TS.isEntityAttackable(targetBreeze,allowedVictim));
 targetAim(foreignVictim);
 targetPhase='switch';targetTick=0;
 ServerEvents.tick(function(event){
@@ -49,12 +54,14 @@ ServerEvents.tick(function(event){
    targetCheck('member target follows a new gaze',targetMember.getTarget()===foreignVictim);
    targetCheck('Brain target follows a new gaze',
     targetBrain.getMemory(TM.ATTACK_TARGET).isPresent()&&targetBrain.getMemory(TM.ATTACK_TARGET).get()===foreignVictim);
+   targetCheck('breeze target follows a new gaze',targetBreeze.getTarget()===foreignVictim);
    tp.setXRot(-90);tp.setYRot(0);tp.setYHeadRot(0);tp.setYBodyRot(0);TG.clear();
    targetPhase='clear';targetTick=0;return;
   }
   if(targetPhase==='clear'&&targetTick>=2){
    targetCheck('looking at nothing clears the member target',targetMember.getTarget()===null);
    targetCheck('looking at nothing clears the Brain target',!targetBrain.getMemory(TM.ATTACK_TARGET).isPresent());
+   targetCheck('looking at nothing clears the breeze target',targetBreeze.getTarget()===null);
    TF.peel(tp);allowedVictim.discard();foreignVictim.discard();TG.clear();targetPhase='done';
   }
  }catch(error){targetError=String(error);targetPhase='failed';console.error('Player target regression: '+targetError);}
