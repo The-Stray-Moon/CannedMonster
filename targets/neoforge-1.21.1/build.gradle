@@ -26,12 +26,49 @@ sourceSets {
 
 def bootstrapJar = tasks.register('bootstrapJar', Jar) {
     from sourceSets.bootstrap.output
-    archiveFileName = 'fusion-bootstrap-0.1.0.jar'
-    manifest.attributes('FMLModType': 'LIBRARY', 'Automatic-Module-Name': 'cc.sighs.cannedmonster.bootstrap')
+    archiveFileName = 'fusion-asm-dev.jar'
+    destinationDirectory = layout.buildDirectory.dir('bootstrap')
+    manifest.attributes('Automatic-Module-Name': 'cc.sighs.cannedmonster.bootstrap')
 }
 
-tasks.named('processResources', ProcessResources).configure {
-    from(bootstrapJar) { into 'META-INF/jarjar' }
+def gameJar = tasks.register('gameJar', Jar) {
+    from sourceSets.main.output
+    archiveFileName = 'game.jar'
+    destinationDirectory = layout.buildDirectory.dir('embedded')
+    manifest.attributes('FMLModType': 'MOD', 'Automatic-Module-Name': 'cc.sighs.cannedmonster')
+}
+
+tasks.named('jar', Jar).configure {
+    def gameOutputs = sourceSets.main.output.files.collect { it.toPath() }
+    exclude { entry -> gameOutputs.any { entry.file.toPath().startsWith(it) } }
+    from sourceSets.bootstrap.output
+    from(gameJar) { into 'META-INF/cannedmonster' }
+    manifest.attributes('Automatic-Module-Name': 'cc.sighs.cannedmonster.bootstrap')
+}
+
+tasks.named('test', Test).configure {
+    dependsOn tasks.named('jar')
+    inputs.file(tasks.named('jar').flatMap { it.archiveFile })
+    systemProperty 'cannedmonster.test.artifact', tasks.named('jar').get().archiveFile.get().asFile.absolutePath
+}
+
+def packagedRun = providers.gradleProperty('verifyPackagedMod').isPresent()
+def prepareAsmRun = tasks.register('prepareAsmRun') {
+    dependsOn(packagedRun ? tasks.named('jar') : bootstrapJar)
+    doLast {
+        def mods = file('run/mods')
+        mods.mkdirs()
+        delete new File(mods, packagedRun ? 'cannedmonster-asm-dev.jar' : 'cannedmonster-packaged.jar')
+        copy {
+            from(packagedRun ? tasks.named('jar').get().archiveFile : bootstrapJar.get().archiveFile)
+            into mods
+            rename { packagedRun ? 'cannedmonster-packaged.jar' : 'cannedmonster-asm-dev.jar' }
+        }
+    }
+}
+
+tasks.withType(net.neoforged.moddevgradle.internal.RunGameTask).configureEach {
+    dependsOn prepareAsmRun
 }
 
 tasks.named('sourcesJar', Jar).configure {
@@ -64,7 +101,6 @@ neoForge {
 }
 
 if (providers.gradleProperty('verifyPackagedMod').isPresent()) {
-    dependencies.add('runtimeOnly', files(tasks.named('jar')))
     tasks.withType(net.neoforged.moddevgradle.internal.RunGameTask).configureEach {
         classpathProvider.setFrom(configurations.runtimeClasspath)
     }

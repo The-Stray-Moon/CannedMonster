@@ -53,6 +53,12 @@
 
 不要把 target 专属类以同一全限定名复制到 `common`，也不要依赖 classpath 顺序覆盖 shared class。
 
+### NeoForge 1.21.1 ASM 启动与打包
+
+本目标不再通过 NeoForge coremod 接入。外层发布 jar 只放启动期 `ITransformationService`、`IModFileCandidateLocator` 和 ASM 实现；游戏代码与资源放在 `META-INF/cannedmonster/game.jar`，由 locator 交给 NeoForge 正常扫描 metadata、Mixin 与依赖。不能把外层游戏类重新混入 SERVICE 层，也不能把启动服务仅放到 GAME 层的嵌套库中。
+
+`runClient` / `runServer` 的前置任务 `prepareAsmRun` 管理 run/mods 下的 `cannedmonster-asm-dev.jar` 与 `cannedmonster-packaged.jar`，根据 `-PverifyPackagedMod` 互斥安装；其他 mods 文件不自动清理。成品模式禁用源码模组，并从 `RunGameTask.classpathProvider` 排除开发输出。启动参数不需要 Java Agent。构建后检查外层服务注册、内层 metadata/资源以及两层无重复游戏包，再分别验证开发入口和成品入口；启动成功不能代替融合行为验证。
+
 ## 变更分类
 
 提交或 PR 必须先选择一种主类别。

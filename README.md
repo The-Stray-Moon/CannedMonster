@@ -233,7 +233,21 @@ NeoForge 21.1.234 / JDK 21，从 `runClient -PverifyPackagedMod` 加载成品 ja
 
 独立服务器曾用同一成品启动到 Done，但默认 run 目录与客户端共享，出现日志锁定和 AutoJS 25585 端口冲突；立即停止并清理该次新建的服务端 world/server.properties，**没有完成独立服务器行为验证**。完整隔离独服、第三方生物、模拟网络延迟、长期骑乘及大规模性能仍未验证。导航具体子类强转、完整 Goal/Brain 请求事务和跨成员导航通道仍是明确剩余边界，不把本轮核心骑乘修复等同于整个通用融合架构完成。
 
-### 已执行的验证
+### ASM 启动入口迁移验证（2026-11-16）
+
+仅 NeoForge 1.21.1：删除 NeoForge coremod 实现和服务注册，改用 ModLauncher `ITransformationService` + 独立 ASM 变换器。已有 Mixin 与融合规则保持不变；不是把字节码修改本身移除，也不宣称跨加载器通用。
+
+- JDK 21 执行 `clean build verifyHotDebug` 成功，78 项测试通过，0 失败/错误/跳过。新增测试覆盖无类加载索引、缺失目录失败、外部字段使用者纳入变换，以及实际发布 jar 的 SERVICE/GAME 包隔离。
+- 成品 `runClient -PverifyPackagedMod` 和源码 `runClient` 均实际启动并进入已有专用测试世界 `Fusion motion verification`。AutoJS 1.0.1 / KubeJS 2101.7.2-build.379 / Rhino 2101.2.7-build.81；`status` 确认 client/server 可用，client 负责后台模式与打开世界，server 执行断言。
+- 两种入口均运行 `src/test/resources/bootstrap/asm-smoke.js` 与 `assert-asm.js`：服务列表包含 `cannedmonster_asm`，牛→羊→兔子融合的身体推进恰好 100 个真实 tick，成员顺序、绑定、成员未登记且不在世界、共享氧气字段写入全部通过。最终 `ok:true`、无 MCP `isError`，server `kubejs_log` 的 errorCount/warningCount 均为 0。
+- 成品运行 `motion/native-regression.js`：生存模式挤奶返回 CONSUME 并得到奶桶、融合 NBT 保存/加载、成员 travel 不移动身体、外部速度写入共享、普通实体权威未改变通过。脚本前置条件为玩家存活、测试平台区块已加载且挤奶使用生存模式；创造模式保留空桶不是融合失败。
+- 成品 `saveEverything(false,true,true)` 返回 true，完整退出 JVM 再启动同一成品，`bootstrap/verify-persistence.js` 恢复同一 UUID `295d9d16-85f3-48f0-926c-b474f0119adb`，成员仍为牛、羊，身体仍为兔子；随后源码入口也读回通过。最终清理本次带 `asm-verification` 标记的测试体并保存，退出测试 JVM。
+
+重跑先隔离旧脚本观察器，准备原 motion 测试平台，让存活玩家位于 `(0,200,0)` 附近；在 server side 执行 smoke，等待至少 100 个真实 tick 后执行 assert。需要跨 JVM 验证时保存、退出、重启并加载同一测试世界，再执行 verify-persistence，不能先重跑 smoke（它会替换旧测试体）。
+
+本轮未重跑独立服务器行为、完整罐头/玩家输入/战利品/派生矩阵、第三方生物或规模性能；下列历史记录不是新入口下这些场景的验证。外部发布平台对内嵌 metadata 的识别也尚未验证，见 [发布指南](docs/PUBLISHING.md)。
+
+### 已执行的历史验证
 
 NeoForge 21.1.234 / Minecraft 1.21.1 / JDK 21；开发客户端加载 AutoJS 1.0.1、KubeJS 2101.7.2-build.379 和 Rhino 2101.2.7-build.81。在新建的 `CannedMonster verification` 测试世界中执行，未操作已有世界。
 
@@ -244,7 +258,7 @@ NeoForge 21.1.234 / Minecraft 1.21.1 / JDK 21；开发客户端加载 AutoJS 1.0
 - 跳跃场景：用 `ServerEvents.tick` 观察 100 tick，每 10 tick 请求一次 `rabbit.getNavigation().moveTo(...)`。观测到 18 tick 的正向跳跃速度大于 0.05，最大上升速度 0.21560001587867758；身体 `tickCount` 只增加 100。
 - 存档场景：先验证 `rabbit.saveWithoutId(new CompoundTag())` 后创建新 Rabbit 并 `load(saved)` 能恢复牛成员；随后从最终 jar 启动、生成并保存测试实体、完整退出 JVM，再次从同一 jar 启动并进入存档。兔子和女巫均恢复一个成员，重新挤奶得到奶桶，女巫仍燃烧且有抗火效果。跨维度尚未验证。
 - 重启验证发现并修复了停止追踪事件过早解绑的问题：EntityLeaveLevelEvent 不总意味着实体被移除，现在真实 setRemoved 后才清理绑定。
-- 最终 jar 包含 NeoForge metadata、Mixin 配置与嵌套 bootstrap LIBRARY；不包含 AutoJS、KubeJS 或 Rhino。当前 27 项单元测试全部通过，包括未知子类真实字节码执行、未列名引擎字段、final 保留、任意命名的运动输入/登记标志推导、前后置续接顺序、不调用 super 的成员、独立重复调用与异常后恢复。成品运行使用 `runClient -PverifyPackagedMod`，排除开发类目录。
+- 当前发布结构改为单 jar：外层通过 ModLauncher `ITransformationService` 加载 ASM，内层 `META-INF/cannedmonster/game.jar` 包含 NeoForge metadata、Mixin 配置、游戏类与资源，由启动期 locator 登记；不再包含旧 coremod 入口或嵌套 bootstrap LIBRARY，不包含 AutoJS、KubeJS 或 Rhino。原入口下的 27 项历史测试包括未知子类真实字节码执行、未列名引擎字段、final 保留、任意命名的运动输入/登记标志推导、前后置续接顺序、不调用 super 的成员、独立重复调用与异常后恢复，不能代替新入口运行验证。成品运行使用 `runClient -PverifyPackagedMod`，排除开发类目录，并将完整发布 jar 放入 run/mods。
 - 续接重构在新建的 `Fusion continuation verification` 世界重新验证：从 jar 生成两组实体，退出 JVM 再进入后仍恢复成员、能挤奶且日晒下有抗火。最终版本 100 tick 观察中身体增加 100 tick，18 tick 上升速度大于 0.05。
 - 运动归属断言：成员 `setDeltaMovement(new Vec3(0.1,0.4,0.2))` 后身体读取相同速度；成员 `travel(new Vec3(1,0,0))` 不改变身体位置。Rhino 的字段/方法重名包装必须用 `Number(vector.y)` 转换后比较，不能用严格等号直接比较包装对象。
 - 新增三成员运行验证：创建 Sheep、Pig、Fox，调用 `FusionRuntime.attach(fox, List.of(sheep,pig))`，仅将 Fox 加入世界。回读 Fox 存活并推进 883 tick，两个成员保留，世界查询不包含 Sheep/Pig，两成员 `isAddedToLevel()` 均为 false。没有为该组合新增代码。实际第三方生物模组尚未进行广泛验证。

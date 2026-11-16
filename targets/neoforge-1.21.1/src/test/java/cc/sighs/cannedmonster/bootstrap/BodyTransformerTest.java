@@ -21,7 +21,7 @@ class BodyTransformerTest {
     @Test
     void executesTransformedInheritedReadsAndWritesOnOneBody() throws Exception {
         Map<String, ClassNode> index = fixture();
-        var transformer = new FusionCoreMod.BodyTransformer(index);
+        var transformer = new FusionTransformationService.Adapter(new BodyTransformer(index));
         ClassLoader loader = transformedLoader(index, transformer);
         Class<?> type = loader.loadClass(SPECIES.replace('/', '.'));
         Object host = type.getConstructor().newInstance();
@@ -52,7 +52,7 @@ class BodyTransformerTest {
     void doesNotRedirectShadowingFieldsFromUnknownMods() throws Exception {
         Map<String, ClassNode> index = fixture();
         index.get(SPECIES).fields.add(new FieldNode(Opcodes.ACC_PUBLIC, "remainingFireTicks", "I", null, null));
-        var transformer = new FusionCoreMod.BodyTransformer(index);
+        var transformer = new FusionTransformationService.Adapter(new BodyTransformer(index));
         Class<?> type = transformedLoader(index, transformer).loadClass(SPECIES.replace('/', '.'));
         Object host = type.getConstructor().newInstance();
         Object facet = type.getConstructor().newInstance();
@@ -69,7 +69,7 @@ class BodyTransformerTest {
 
     @Test
     void rejectsAnIncompleteMinecraftClassIndex() {
-        assertThrows(IllegalStateException.class, () -> new FusionCoreMod.BodyTransformer(Map.of()));
+        assertThrows(IllegalStateException.class, () -> new BodyTransformer(Map.of()));
     }
 
     @Test
@@ -96,7 +96,7 @@ class BodyTransformerTest {
         tick.instructions.add(new FieldInsnNode(Opcodes.PUTFIELD, SPECIES, "afterBody", "I"));
         tick.instructions.add(new InsnNode(Opcodes.RETURN));
         species.methods.add(tick);
-        Class<?> type = transformedLoader(index, new FusionCoreMod.BodyTransformer(index)).loadClass(SPECIES.replace('/', '.'));
+        Class<?> type = transformedLoader(index, new FusionTransformationService.Adapter(new BodyTransformer(index))).loadClass(SPECIES.replace('/', '.'));
         Object host = type.getConstructor().newInstance();
         Object facet = type.getConstructor().newInstance();
         Object data = new Object();
@@ -122,7 +122,7 @@ class BodyTransformerTest {
         ClassNode entity = index.get(ENTITY);
         entity.fields.add(new FieldNode(Opcodes.ACC_PRIVATE, "unknownModInjectedEnergy", "D", null, null));
         entity.fields.add(new FieldNode(Opcodes.ACC_PRIVATE | Opcodes.ACC_FINAL, "unknownOwnedState", "Ljava/util/List;", null, null));
-        var transformer = new FusionCoreMod.BodyTransformer(index);
+        var transformer = new FusionTransformationService.Adapter(new BodyTransformer(index));
         transformer.transform(entity, null);
         assertTrue(entity.methods.stream().anyMatch(method -> method.name.equals("cannedmonster$read$unknownModInjectedEnergy")));
         assertTrue(entity.methods.stream().anyMatch(method -> method.name.equals("cannedmonster$write$unknownModInjectedEnergy")));
@@ -149,7 +149,7 @@ class BodyTransformerTest {
         motion.instructions.add(new FieldInsnNode(Opcodes.PUTFIELD, ENTITY, "arbitraryMotionInput", "F"));
         motion.instructions.add(new InsnNode(Opcodes.RETURN));
         entity.methods.add(motion);
-        var transformer = new FusionCoreMod.BodyTransformer(index);
+        var transformer = new FusionTransformationService.Adapter(new BodyTransformer(index));
         transformer.transform(entity, null);
         assertFalse(entity.methods.stream().anyMatch(method -> method.name.equals("cannedmonster$read$arbitraryMembershipFlag")));
         assertFalse(entity.methods.stream().anyMatch(method -> method.name.equals("cannedmonster$write$arbitraryMotionInput")));
@@ -164,7 +164,7 @@ class BodyTransformerTest {
             remove.instructions.add(new InsnNode(Opcodes.RETURN));
             index.get(name).methods.add(remove);
         }
-        var transformer = new FusionCoreMod.BodyTransformer(index);
+        var transformer = new FusionTransformationService.Adapter(new BodyTransformer(index));
         for (String name : java.util.List.of(LIVING, SPECIES)) {
             ClassNode node = transformer.transform(index.get(name), null);
             MethodNode remove = node.methods.stream().filter(method -> method.name.equals("remove")).findFirst().orElseThrow();
@@ -187,7 +187,7 @@ class BodyTransformerTest {
             MethodNode declaration = new MethodNode(Opcodes.ACC_PUBLIC | access, "remove",
                     "(Lnet/minecraft/world/entity/Entity$RemovalReason;)V", null, null);
             index.get(SPECIES).methods.add(declaration);
-            new FusionCoreMod.BodyTransformer(index).transform(index.get(SPECIES), null);
+            new FusionTransformationService.Adapter(new BodyTransformer(index)).transform(index.get(SPECIES), null);
             assertEquals(0, declaration.instructions.size());
         }
     }
@@ -233,7 +233,7 @@ class BodyTransformerTest {
         navigation.methods.add(moveTo);
         index.put(NAVIGATION, navigation);
 
-        var transformer = new FusionCoreMod.BodyTransformer(index);
+        var transformer = new FusionTransformationService.Adapter(new BodyTransformer(index));
         ClassNode transformedEntity = transformer.transform(entity, null);
         assertTrue(calls(method(transformedEntity, "cannedmonster$write$deltaMovement"),
                 "cc/sighs/cannedmonster/fusion/FusionRiding", "velocityTarget"));
@@ -260,7 +260,7 @@ class BodyTransformerTest {
         ai.instructions.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, SPECIES, "setDeltaMovement", "(DDD)V", false));
         ai.instructions.add(new InsnNode(Opcodes.RETURN));
         index.get(SPECIES).methods.add(ai);
-        ClassNode transformed = new FusionCoreMod.BodyTransformer(index).transform(index.get(SPECIES), null);
+        ClassNode transformed = new FusionTransformationService.Adapter(new BodyTransformer(index)).transform(index.get(SPECIES), null);
         assertTrue(calls(method(transformed, "aiStep"), "cc/sighs/cannedmonster/fusion/FusionRiding", "autonomousVelocity"));
     }
 
@@ -281,7 +281,7 @@ class BodyTransformerTest {
         ai.instructions.add(new FieldInsnNode(Opcodes.PUTFIELD, SPECIES, "arbitraryVelocity", vector));
         ai.instructions.add(new InsnNode(Opcodes.RETURN));
         index.get(SPECIES).methods.add(ai);
-        ClassNode transformed = new FusionCoreMod.BodyTransformer(index).transform(index.get(SPECIES), null);
+        ClassNode transformed = new FusionTransformationService.Adapter(new BodyTransformer(index)).transform(index.get(SPECIES), null);
         assertTrue(calls(method(transformed, "aiStep"), "cc/sighs/cannedmonster/fusion/FusionRiding", "autonomousVelocity"));
         for (AbstractInsnNode instruction : method(transformed, "aiStep").instructions) {
             if (instruction instanceof MethodInsnNode call && call.name.equals("autonomousVelocity")) {
@@ -296,7 +296,7 @@ class BodyTransformerTest {
         Map<String, ClassNode> index = fixture();
         String playerName = "net/minecraft/world/entity/player/Player";
         index.put(playerName, type(playerName, LIVING));
-        ClassLoader loader = transformedLoader(index, new FusionCoreMod.BodyTransformer(index));
+        ClassLoader loader = transformedLoader(index, new FusionTransformationService.Adapter(new BodyTransformer(index)));
         Class<?> species = loader.loadClass(SPECIES.replace('/', '.'));
         Class<?> playerType = loader.loadClass(playerName.replace('/', '.'));
         Object player = playerType.getConstructor().newInstance();
@@ -327,7 +327,7 @@ class BodyTransformerTest {
         return false;
     }
 
-    private static ClassLoader transformedLoader(Map<String, ClassNode> index, FusionCoreMod.BodyTransformer transformer) {
+    private static ClassLoader transformedLoader(Map<String, ClassNode> index, FusionTransformationService.Adapter transformer) {
         Map<String, byte[]> bytecode = new HashMap<>();
         index.forEach((name, node) -> {
             ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
