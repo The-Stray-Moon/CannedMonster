@@ -23,7 +23,7 @@ public final class HurtCalls {
                     return MethodHandles.privateLookupIn(Player.class, MethodHandles.lookup())
                             .findSpecial(Player.class, "hurt", signature, Player.class);
                 }
-                return MethodHandles.publicLookup().findVirtual(type, "hurt", signature);
+                return MethodHandles.publicLookup().findVirtual(LivingEntity.class, "hurt", signature);
             } catch (ReflectiveOperationException failure) {
                 throw new IllegalStateException("Cannot bind native hurt for " + type.getName(), failure);
             }

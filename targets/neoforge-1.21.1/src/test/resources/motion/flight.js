@@ -13,13 +13,15 @@ var flightRow = motionSpawn('creeper -> allay survival pursuit', ET.CREEPER, ET.
 var flightElapsed = 0;
 var flightSamples = [];
 var flightDone = false;
-(function(flightGeneration) {
+var flightRunGeneration = typeof flightRunGeneration === 'undefined' ? 1 : flightRunGeneration + 1;
+(function(flightGeneration, runGeneration) {
 ServerEvents.tick(function(event) {
-    if (flightGeneration !== motionGeneration || flightDone || flightElapsed >= 200) return;
+    if (flightGeneration !== motionGeneration || runGeneration !== flightRunGeneration || flightDone || flightElapsed >= 200) return;
     flightElapsed++;
     if (flightElapsed % 5 === 0) {
         var r = motionSnapshot(flightRow);
         r.swell = flightRow.member.getSwellDir();
+        r.pursuit = Java.loadClass('cc.sighs.cannedmonster.fusion.FusionPursuit').describe(flightRow.body);
         flightSamples.push(r);
         if (r.swell === 1 || flightElapsed === 200) {
             flightDone = true;
@@ -27,5 +29,5 @@ ServerEvents.tick(function(event) {
         }
     }
 });
-})(motionGeneration);
+})(motionGeneration, flightRunGeneration);
 JSON.stringify({temptation:temptationResults,flightStarted:true});

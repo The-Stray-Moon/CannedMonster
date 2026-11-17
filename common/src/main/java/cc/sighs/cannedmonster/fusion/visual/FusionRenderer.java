@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class FusionRenderer {
+    private static final SliceBuffers SLICES = new SliceBuffers(new Matrix4f(), 0, 0);
     private static LivingEntity body;
     private static MultiBufferSource originalBuffers;
     private static boolean effects;
@@ -79,7 +80,8 @@ public final class FusionRenderer {
                 float height = Math.max(0.01F, host.getBbHeight());
                 float lower = i == members.size() - 1 ? Float.NEGATIVE_INFINITY : height * (members.size() - i - 1) / members.size();
                 float upper = i == 0 ? Float.POSITIVE_INFINITY : height * (members.size() - i) / members.size();
-                SliceBuffers sliced = new SliceBuffers(inverse, lower, upper);
+                SliceBuffers sliced = SLICES;
+                sliced.reset(inverse, lower, upper);
                 poses.pushPose();
                 try {
                     if (member != host) {

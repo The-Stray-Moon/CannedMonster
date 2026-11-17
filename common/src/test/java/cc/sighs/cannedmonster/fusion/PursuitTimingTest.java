@@ -6,11 +6,25 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class PursuitTimingTest {
     @Test
-    void singleQueryNeverStartsPursuit() {
+    void singleQueryRemainsPendingUntilItsRefreshWindowExpires() {
         PursuitTiming timing = new PursuitTiming();
         timing.refresh(0, 10.0, false);
-        assertFalse(timing.update(1, 10.0));
+        assertTrue(timing.update(1, 10.0));
+        assertFalse(timing.active(1));
         assertFalse(timing.direct());
+        assertFalse(timing.update(41, 10.0));
+        assertFalse(timing.direct());
+    }
+
+    @Test
+    void separateQueriesCanAccumulateWithoutDuplicateSuperRegistrations() {
+        PursuitTiming timing = new PursuitTiming();
+        timing.refresh(0, 10.0, false);
+        for (int tick = 1; tick < 20; tick++) assertTrue(timing.update(tick, 10.0));
+        timing.refresh(20, 10.0, true);
+        assertTrue(timing.active(20));
+        assertTrue(timing.update(40, 10.0));
+        assertTrue(timing.direct());
     }
 
     @Test

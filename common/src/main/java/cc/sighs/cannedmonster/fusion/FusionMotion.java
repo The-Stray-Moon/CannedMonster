@@ -7,9 +7,7 @@ import net.minecraft.world.entity.ai.navigation.PathNavigation;
 import net.minecraft.world.level.pathfinder.Path;
 
 import javax.annotation.Nullable;
-import java.util.IdentityHashMap;
 import java.util.List;
-import java.util.Map;
 
 public final class FusionMotion {
     public interface ClientView {
@@ -21,7 +19,6 @@ public final class FusionMotion {
     final java.util.UUID generation = java.util.UUID.randomUUID();
     private final Mob body;
     private final List<Mob> members;
-    private final Map<Mob, FusionNavigation> navigations = new IdentityHashMap<>();
     private final MotionClaims claims = new MotionClaims();
     private static final ExecutionSlot<PathNavigation> NAVIGATION_TICK = new ExecutionSlot<>();
     private static final ExecutionSlot<Mob> NAVIGATION_CALLER = new ExecutionSlot<>();
@@ -43,7 +40,7 @@ public final class FusionMotion {
 
     @Nullable
     static FusionMotion of(Mob entity) {
-        return BodyLinks.session(entity) instanceof FusionMotion motion ? motion : null;
+        return BodyLinks.session(entity) instanceof FusionSession session ? session.motion : null;
     }
 
     public static boolean isFusionBody(Entity entity) {
@@ -69,12 +66,6 @@ public final class FusionMotion {
     public static int controlIndex(Mob body) {
         Mob source = FusionRiding.source(body);
         return source == null ? -1 : members(body).indexOf(source);
-    }
-
-    public static PathNavigation navigation(PathNavigation original, Entity entity) {
-        if (original instanceof FusionNavigation || !(entity instanceof Mob mob) || !BodyLinks.isFacet(mob)) return original;
-        FusionMotion motion = of(mob);
-        return motion == null ? original : motion.navigations.computeIfAbsent(mob, ignored -> new FusionNavigation(mob, original));
     }
 
     @Nullable
@@ -157,13 +148,16 @@ public final class FusionMotion {
     Mob pathOwner() { return (Mob) claims.owner(this::pathActive); }
 
     boolean claim(Mob member) {
-        if (reserved(member)) return false;
+        if (!mayPath(member)) return false;
         if (!claims.claim(member, priority(member), this::pathActive)) return false;
         holdingMember = null;
         return true;
     }
     boolean mayPath(Mob member) {
         if (reserved(member)) return false;
+        FusionPursuit.Pursuit active = pursuit;
+        if (active != null && active.owner != null && active.owner != member && active.target != null
+                && active.timing.active(body.tickCount) && priority(member) >= priority(active.owner)) return false;
         return claims.allows(member, priority(member), this::pathActive);
     }
     int priority(Mob member) {
@@ -185,7 +179,7 @@ public final class FusionMotion {
         }
         return false;
     }
-    private Mob caller() {
+    Mob caller() {
         Object current = NAVIGATION_CALLER.get();
         if (current == null) current = OrderedCalls.currentMember();
         return current instanceof Mob mob && (mob == body || members.contains(mob)) ? mob : body;

@@ -59,6 +59,14 @@
 
 `runClient` / `runServer` 的前置任务 `prepareAsmRun` 管理 run/mods 下的 `cannedmonster-asm-dev.jar` 与 `cannedmonster-packaged.jar`，根据 `-PverifyPackagedMod` 互斥安装；其他 mods 文件不自动清理。成品模式禁用源码模组，并从 `RunGameTask.classpathProvider` 排除开发输出。启动参数不需要 Java Agent。构建后检查外层服务注册、内层 metadata/资源以及两层无重复游戏包，再分别验证开发入口和成品入口；启动成功不能代替融合行为验证。
 
+启动索引必须跳过模块描述文件，按 manifest 和当前 JVM 解析 multi-release 类，未知父类或空父类不能导致扫描崩溃。方法体注入必须排除 abstract/native/无 Code 声明；native 内部行为不属于支持范围。调度句柄从公共基类契约取得，不能要求模组实体实现类为 public，也不能把玩家精确调用退回 ServerPlayer 虚调用。相关回归位于 `BootstrapTest`、`BodyTransformerTest`、`NativeCallHandlesTest` 与 `bootstrap/native-calls.js`。
+
+融合会话驻留身体的实例 session 槽：成员列表、属性原始值、OrderedCalls 调度与 FusionMotion 共用该状态；全局 HOSTS 仅供清理/配置刷新，UUID 归属表仅在组成变更时维护，不得为查重调用全体成员存档。启动推导后只保留独立类布局，不长期引用完整 ASM 方法树。
+
+外观协议为 3，完整快照用于开始追踪、组成变化、成员事件与每 20 tick 补全；每 2 tick 仅发变化字段且不消耗原版 dirty。单人追踪补发不能推进其他追踪者的差分基线。客户端缺完整基线拒收增量，剥离后的序号墓碑最多 4096 条、保留 200 客户端 tick，切世界全部清理。渲染捕获使用连续 float 缓冲与可复用裁剪工作区，必须保持 QUADS/TRIANGLES 真正裁剪和全属性插值；只在装备内容变化时复制，不得共享身体 ItemStack 引用。相关运行脚本在 `src/test/resources/bootstrap/optimized-session.js`、`appearance-codec.js`、`appearance-order.js` 与 `verify-optimized.js`。
+
+导航必须保留成员原生实例及具体类型，不能通过替换 `getNavigation()` 返回值隐藏强转问题。ASM 从 PathNavigation 的标准请求声明提取签名，在已扫描子类覆写入口转接请求；配置、节点求值器与私有状态保持成员本地。非融合/玩家成员保持原入口；转接调用用 ExecutionSlot finally 恢复成员上下文。追击只允许通过 mayPath 的调用登记，失败请求不得刷新或替换有效目标；不要恢复旧代理两次登记才能维持窗口的偶然行为。`PursuitTiming` 单次请求保留至超时但不启用直接推进，第二次获准刷新后再按进展窗口判断。运行回归入口为 `motion/navigation-regression.js`、setup/flight、pursuit-verify 和 authority 系列；重跑 flight 必须隔离旧观察器，flightRunGeneration 防止同作用域重复注入导致双倍计数。
+
 ## 变更分类
 
 提交或 PR 必须先选择一种主类别。

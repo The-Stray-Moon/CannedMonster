@@ -37,7 +37,7 @@ final class PursuitTiming {
             return false;
         }
         if (calls < MIN_CALLS) {
-            return false;
+            return true;
         }
         if (windowDistance == Double.MAX_VALUE) {
             windowStart = tick;

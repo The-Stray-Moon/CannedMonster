@@ -27,14 +27,27 @@ public final class BodyTransformer {
     private static final Set<String> INPUT_METHODS = Set.of("setSpeed(F)V", "setXxa(F)V", "setYya(F)V",
             "setZza(F)V", "setJumping(Z)V", "setYRot(F)V", "setXRot(F)V");
     private final Map<String, ClassNode> index;
+    private record Inheritance(String type, String parent) {}
+    private final Map<Inheritance, Boolean> inheritance = new java.util.concurrent.ConcurrentHashMap<>();
     private final Map<String, FieldNode> fields = new HashMap<>();
     private final Map<String, String> declarations = new java.util.concurrent.ConcurrentHashMap<>();
     private final Set<String> velocityFields = new HashSet<>();
     private final Set<String> localInputs = new HashSet<>();
     private final Set<String> targetNames = new HashSet<>();
+    private final Set<String> navigationRequests = new HashSet<>();
+    private static final Set<String> NAVIGATION_REQUEST_NAMES = Set.of("createPath", "moveTo", "stop", "tick", "getPath",
+            "isDone", "isInProgress", "isStuck", "recomputePath", "setSpeedModifier", "getTargetPos", "shouldRecomputePath", "getMaxDistanceToWaypoint");
 
     public BodyTransformer(Map<String, ClassNode> index) {
-        this.index = Map.copyOf(index);
+        this.index = new HashMap<>(index);
+        ClassNode navigation = index.get(NAVIGATION);
+        if (navigation != null) {
+            for (MethodNode method : navigation.methods) {
+                if (NAVIGATION_REQUEST_NAMES.contains(method.name) && (method.access & (Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC)) == 0) {
+                    navigationRequests.add(method.name + method.desc);
+                }
+            }
+        }
         for (String owner : CORE) {
             ClassNode node = index.get(owner);
             if (node == null) {
@@ -82,6 +95,16 @@ public final class BodyTransformer {
                 }
             }
         }
+        this.index.replaceAll((name, source) -> {
+            ClassNode layout = new ClassNode();
+            layout.name = name;
+            layout.superName = source.superName;
+            layout.interfaces = List.copyOf(source.interfaces);
+            for (FieldNode field : source.fields) {
+                layout.fields.add(new FieldNode(field.access, field.name, field.desc, null, null));
+            }
+            return layout;
+        });
     }
 
     private static String key(String owner, String name, String descriptor) {
@@ -119,10 +142,13 @@ public final class BodyTransformer {
     }
 
     private boolean subtype(String name, String parent) {
-        return subtype(name, parent, new HashSet<>());
+        if (name == null) return false;
+        return inheritance.computeIfAbsent(new Inheritance(name, parent),
+                ignored -> subtype(name, parent, new HashSet<>()));
     }
 
     private boolean subtype(String name, String parent, Set<String> visited) {
+        if (name == null) return false;
         if (parent.equals(name)) {
             return true;
         }
@@ -135,14 +161,17 @@ public final class BodyTransformer {
     }
 
     public ClassNode transform(ClassNode node) {
+        if ((node.access & Opcodes.ACC_MODULE) != 0) return node;
+        boolean mobClass = subtype(node.name, MOB);
         for (MethodNode method : List.copyOf(node.methods)) {
-            if (method.name.equals("<init>") || method.name.equals("<clinit>") || method.name.startsWith("cannedmonster$")) {
+            if ((method.access & (Opcodes.ACC_ABSTRACT | Opcodes.ACC_NATIVE)) != 0 || method.instructions.size() == 0
+                    || method.name.equals("<init>") || method.name.equals("<clinit>") || method.name.startsWith("cannedmonster$")) {
                 continue;
             }
             Set<MethodInsnNode> creations = method.name.equals("remove") && subtype(node.name, MOB)
                     ? CreationOrigins.fromReceiver(node.name, method) : Set.of();
             for (AbstractInsnNode instruction : method.instructions.toArray()) {
-                if (subtype(node.name, MOB) && !CORE.contains(node.name) && (method.access & Opcodes.ACC_STATIC) == 0
+                if (mobClass && !CORE.contains(node.name) && (method.access & Opcodes.ACC_STATIC) == 0
                         && (method.name.equals("aiStep") || method.name.equals("tick"))
                         && instruction instanceof MethodInsnNode velocity && velocity.name.equals("setDeltaMovement")
                         && velocity.getOpcode() != Opcodes.INVOKESTATIC && subtype(velocity.owner, ENTITY)
@@ -211,7 +240,7 @@ public final class BodyTransformer {
                 guard.add(original);
                 method.instructions.insert(guard);
             }
-            if (subtype(node.name, MOB) && (method.access & (Opcodes.ACC_ABSTRACT | Opcodes.ACC_STATIC | Opcodes.ACC_NATIVE)) == 0
+            if (mobClass && (method.access & (Opcodes.ACC_ABSTRACT | Opcodes.ACC_STATIC | Opcodes.ACC_NATIVE)) == 0
                     && ((method.name.equals("doHurtTarget") && method.desc.equals("(Lnet/minecraft/world/entity/Entity;)Z"))
                     || (method.name.equals("performRangedAttack") && method.desc.equals("(Lnet/minecraft/world/entity/LivingEntity;F)V")))) {
                 LabelNode original = new LabelNode();
@@ -262,16 +291,6 @@ public final class BodyTransformer {
                 guard.add(new InsnNode(Opcodes.RETURN));
                 guard.add(original);
                 method.instructions.insert(guard);
-            }
-            if (node.name.equals(MOB) && method.name.equals("getNavigation")
-                    && method.desc.equals("()Lnet/minecraft/world/entity/ai/navigation/PathNavigation;")) {
-                for (AbstractInsnNode instruction : method.instructions.toArray()) {
-                    if (instruction.getOpcode() == Opcodes.ARETURN) {
-                        method.instructions.insertBefore(instruction, new VarInsnNode(Opcodes.ALOAD, 0));
-                        method.instructions.insertBefore(instruction, new MethodInsnNode(Opcodes.INVOKESTATIC, MOTION,
-                                "navigation", "(Lnet/minecraft/world/entity/ai/navigation/PathNavigation;Lnet/minecraft/world/entity/Entity;)Lnet/minecraft/world/entity/ai/navigation/PathNavigation;", false));
-                    }
-                }
             }
             if (node.name.equals(MOB) && method.name.equals("getControllingPassenger")
                     && method.desc.equals("()Lnet/minecraft/world/entity/LivingEntity;")) {
@@ -350,6 +369,10 @@ public final class BodyTransformer {
                 redirect.add(new VarInsnNode(Opcodes.ASTORE, 0));
                 method.instructions.insert(redirect);
             }
+            if (subtype(node.name, NAVIGATION) && navigationRequests.contains(method.name + method.desc)
+                    && (method.access & (Opcodes.ACC_STATIC | Opcodes.ACC_PRIVATE)) == 0) {
+                redirectNavigation(method);
+            }
         }
         for (FieldNode field : node.fields) {
             if (fields.containsKey(key(node.name, field.name, field.desc))) {
@@ -366,6 +389,67 @@ public final class BodyTransformer {
             injectSession(node);
         }
         return node;
+    }
+
+    private static void redirectNavigation(MethodNode method) {
+        String handler = "cc/sighs/cannedmonster/fusion/FusionNavigation";
+        InsnList hook = new InsnList();
+        LabelNode original = new LabelNode();
+        hook.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        hook.add(new FieldInsnNode(Opcodes.GETFIELD, NAVIGATION, "mob", "L" + MOB + ";"));
+        hook.add(new MethodInsnNode(Opcodes.INVOKESTATIC, handler, "redirects", "(L" + MOB + ";)Z", false));
+        hook.add(new JumpInsnNode(Opcodes.IFEQ, original));
+        hook.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        hook.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        hook.add(new FieldInsnNode(Opcodes.GETFIELD, NAVIGATION, "mob", "L" + MOB + ";"));
+        hook.add(new LdcInsnNode(method.name + method.desc));
+        Type[] arguments = Type.getArgumentTypes(method.desc);
+        hook.add(new LdcInsnNode(arguments.length));
+        hook.add(new TypeInsnNode(Opcodes.ANEWARRAY, "java/lang/Object"));
+        int local = 1;
+        for (int i = 0; i < arguments.length; i++) {
+            Type type = arguments[i];
+            hook.add(new InsnNode(Opcodes.DUP));
+            hook.add(new LdcInsnNode(i));
+            hook.add(new VarInsnNode(type.getOpcode(Opcodes.ILOAD), local));
+            if (type.getSort() != Type.OBJECT && type.getSort() != Type.ARRAY) {
+                String box = boxed(type);
+                hook.add(new MethodInsnNode(Opcodes.INVOKESTATIC, box, "valueOf", "(" + type.getDescriptor() + ")L" + box + ";", false));
+            }
+            hook.add(new InsnNode(Opcodes.AASTORE));
+            local += type.getSize();
+        }
+        hook.add(new MethodInsnNode(Opcodes.INVOKESTATIC, handler, "dispatch",
+                "(L" + NAVIGATION + ";L" + MOB + ";Ljava/lang/String;[Ljava/lang/Object;)L" + handler + "$Result;", false));
+        Type result = Type.getReturnType(method.desc);
+        if (result.equals(Type.VOID_TYPE)) {
+            hook.add(new InsnNode(Opcodes.POP));
+            hook.add(new InsnNode(Opcodes.RETURN));
+        } else {
+            hook.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, handler + "$Result", "value", "()Ljava/lang/Object;", false));
+            if (result.getSort() == Type.OBJECT || result.getSort() == Type.ARRAY) {
+                hook.add(new TypeInsnNode(Opcodes.CHECKCAST, result.getInternalName()));
+            } else {
+                String box = boxed(result);
+                hook.add(new TypeInsnNode(Opcodes.CHECKCAST, box));
+                hook.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, box,
+                        result.equals(Type.BOOLEAN_TYPE) ? "booleanValue" : result.equals(Type.FLOAT_TYPE) ? "floatValue" : "doubleValue",
+                        "()" + result.getDescriptor(), false));
+            }
+            hook.add(new InsnNode(result.getOpcode(Opcodes.IRETURN)));
+        }
+        hook.add(original);
+        method.instructions.insert(hook);
+    }
+
+    private static String boxed(Type type) {
+        return switch (type.getSort()) {
+            case Type.BOOLEAN -> "java/lang/Boolean";
+            case Type.INT -> "java/lang/Integer";
+            case Type.FLOAT -> "java/lang/Float";
+            case Type.DOUBLE -> "java/lang/Double";
+            default -> throw new IllegalArgumentException("Unsupported navigation primitive " + type);
+        };
     }
 
     private static void injectSession(ClassNode node) {

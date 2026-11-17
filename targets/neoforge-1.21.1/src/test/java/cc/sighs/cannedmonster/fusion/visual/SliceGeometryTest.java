@@ -61,6 +61,30 @@ class SliceGeometryTest {
         assertEquals(2, area(result), 0.00001);
     }
 
+    @Test
+    void reusableWorkspaceMatchesReferenceClippingWithoutPerPolygonStorage() {
+        SliceGeometry.Workspace workspace = new SliceGeometry.Workspace(3);
+        float[] packed = new float[SQUARE.size() * 3];
+        for (int i = 0; i < SQUARE.size(); i++) System.arraycopy(SQUARE.get(i), 0, packed, i * 3, 3);
+        for (int axis = 0; axis < 3; axis++) {
+            for (int step = -2; step < 12; step++) {
+                float lower = step * 0.2F;
+                float upper = lower + 0.35F;
+                var expected = SliceGeometry.clip(SQUARE, axis, lower, upper);
+                int count = workspace.clip(packed, 0, 4, axis, lower, upper);
+                assertEquals(expected.size(), count);
+                for (int vertex = 0; vertex < count; vertex++) {
+                    for (int value = 0; value < 3; value++) assertEquals(expected.get(vertex)[value], workspace.vertices()[vertex * 3 + value], 0.00001);
+                }
+            }
+        }
+        workspace.clip(packed, 0, 4, 1, 0.2F, 1.8F);
+        float[] reused = workspace.vertices();
+        workspace.clip(packed, 0, 4, 1, 0.4F, 1.6F);
+        assertSame(reused, workspace.vertices());
+        assertArrayEquals(new float[]{0, 0, 0, 2, 0, 1, 2, 2, 1, 0, 2, 0}, packed);
+    }
+
     private static double area(List<float[]> polygon) {
         double sum = 0;
         for (int i = 0; i < polygon.size(); i++) {

@@ -1,206 +1,80 @@
 package cc.sighs.cannedmonster.fusion;
 
-import net.minecraft.core.BlockPos;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.navigation.PathNavigation;
-import net.minecraft.world.level.pathfinder.NodeEvaluator;
-import net.minecraft.world.level.pathfinder.Path;
-import net.minecraft.world.level.pathfinder.PathFinder;
-import net.minecraft.world.phys.Vec3;
 
-import javax.annotation.Nullable;
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
+import java.lang.reflect.Modifier;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
-import java.util.stream.Stream;
 
-/**
- * Navigation view of a facet. Paths are computed and followed on the body navigation so that the
- * requesting member does not need a locomotion implementation of its own.
- */
-public final class FusionNavigation extends PathNavigation {
-    private final Mob owner;
-    private final PathNavigation original;
+public final class FusionNavigation {
+    private static final Set<String> REQUESTS = Set.of("createPath", "moveTo", "stop", "tick", "getPath", "isDone",
+            "isInProgress", "isStuck", "recomputePath", "setSpeedModifier", "getTargetPos", "shouldRecomputePath", "getMaxDistanceToWaypoint");
+    private record Call(MethodHandle handle, Class<?> result) {}
+    public record Result(Object value) {}
+    private static final Result EMPTY = new Result(null);
+    private static final Result YES = new Result(true);
+    private static final Result NO = new Result(false);
+    private static final Map<String, Call> CALLS = calls();
 
-    FusionNavigation(Mob owner, PathNavigation original) {
-        super(owner, owner.level());
-        this.owner = owner;
-        this.original = original;
-    }
+    private FusionNavigation() {}
 
-    @Nullable
-    private FusionMotion motion() {
-        return FusionMotion.of(owner);
-    }
-
-    @Nullable
-    private PathNavigation active() {
-        FusionMotion motion = motion();
-        return motion != null && motion.pathOwner() == owner ? motion.bodyNavigation() : null;
-    }
-
-    @Nullable
-    private PathNavigation pathTarget() {
-        FusionMotion motion = motion();
-        return motion != null && motion.mayPath(owner) ? motion.bodyNavigation() : null;
-    }
-
-    @Override
-    protected PathFinder createPathFinder(int range) {
-        return null;
-    }
-
-    @Override
-    protected Vec3 getTempMobPos() {
-        return owner.position();
-    }
-
-    @Override
-    protected boolean canUpdatePath() {
-        return true;
-    }
-
-    @Override
-    public void tick() {
-    }
-
-    @Override
-    public void stop() {
-        FusionMotion motion = motion();
-        if (motion == null) {
-            return;
+    private static Map<String, Call> calls() {
+        Map<String, Call> calls = new HashMap<>();
+        try {
+            var lookup = MethodHandles.privateLookupIn(PathNavigation.class, MethodHandles.lookup());
+            for (var method : PathNavigation.class.getDeclaredMethods()) {
+                if (!REQUESTS.contains(method.getName()) || Modifier.isPrivate(method.getModifiers()) || Modifier.isStatic(method.getModifiers())) continue;
+                MethodType signature = MethodType.methodType(method.getReturnType(), method.getParameterTypes());
+                MethodHandle handle = lookup.findVirtual(PathNavigation.class, method.getName(), signature)
+                        .asSpreader(Object[].class, signature.parameterCount())
+                        .asType(MethodType.methodType(Object.class, PathNavigation.class, Object[].class));
+                calls.put(method.getName() + signature.descriptorString(), new Call(handle, method.getReturnType()));
+            }
+        } catch (ReflectiveOperationException failure) {
+            throw new IllegalStateException("Cannot bind navigation request contracts", failure);
         }
-        motion.stop(owner);
+        return Map.copyOf(calls);
     }
 
-    @Override
-    public boolean moveTo(@Nullable Path path, double speed) {
-        if (path == null) {
-            stop();
-            return false;
+    public static boolean redirects(Mob member) {
+        return BodyLinks.isFacet(member) && FusionMotion.of(member) != null;
+    }
+
+    public static Result dispatch(PathNavigation navigation, Mob member, String signature, Object[] arguments) {
+        FusionMotion motion = FusionMotion.of(member);
+        if (motion == null || !BodyLinks.isFacet(member)) return null;
+        Call call = CALLS.get(signature);
+        if (call == null) throw new IllegalArgumentException("Unknown navigation request " + signature);
+        String name = signature.substring(0, signature.indexOf('('));
+        if (name.equals("tick")) return EMPTY;
+        if (name.equals("stop")) {
+            motion.stop(member);
+            return EMPTY;
         }
-        FusionMotion motion = motion();
-        return motion != null && motion.moveTo(owner, path, speed);
-    }
-
-    @Override
-    public Path createPath(BlockPos pos, int radius) {
-        PathNavigation target = pathTarget();
-        return target == null ? null : motion().query(owner, () -> target.createPath(pos, radius));
-    }
-
-    @Override
-    public Path createPath(BlockPos pos, int radius, int maxRange) {
-        PathNavigation target = pathTarget();
-        return target == null ? null : motion().query(owner, () -> target.createPath(pos, radius, maxRange));
-    }
-
-    @Override
-    public Path createPath(Entity entity, int radius) {
-        FusionPursuit.note(this, owner, entity);
-        PathNavigation target = pathTarget();
-        return target == null ? null : motion().query(owner, () -> target.createPath(entity, radius));
-    }
-
-    @Override
-    public Path createPath(Stream<BlockPos> positions, int radius) {
-        PathNavigation target = pathTarget();
-        return target == null ? null : motion().query(owner, () -> target.createPath(positions, radius));
-    }
-
-    @Override
-    public Path createPath(Set<BlockPos> positions, int radius) {
-        PathNavigation target = pathTarget();
-        return target == null ? null : motion().query(owner, () -> target.createPath(positions, radius));
-    }
-
-    @Override
-    @Nullable
-    public Path getPath() {
-        PathNavigation active = active();
-        return active == null ? null : active.getPath();
-    }
-
-    @Override
-    public boolean isDone() {
-        PathNavigation active = active();
-        return active == null || active.isDone();
-    }
-
-    @Override
-    public boolean isInProgress() {
-        PathNavigation active = active();
-        return active != null && active.isInProgress();
-    }
-
-    @Override
-    public boolean isStuck() {
-        PathNavigation active = active();
-        return active != null && active.isStuck();
-    }
-
-    @Override
-    public void recomputePath() {
-        PathNavigation active = active();
-        if (active != null) {
-            active.recomputePath();
+        if (name.equals("moveTo") && arguments.length == 2 && signature.startsWith("moveTo(Lnet/minecraft/world/level/pathfinder/Path;")) {
+            if (arguments[0] == null) { motion.stop(member); return NO; }
         }
-    }
-
-    @Override
-    public void setSpeedModifier(double speed) {
-        PathNavigation active = active();
-        if (active != null) {
-            active.setSpeedModifier(speed);
+        boolean request = name.equals("createPath") || name.equals("moveTo");
+        if (request ? !motion.mayPath(member) : motion.pathOwner() != member) {
+            if (name.equals("isDone")) return YES;
+            if (call.result == boolean.class) return NO;
+            if (call.result == float.class) return new Result(0.5F);
+            return EMPTY;
         }
-    }
-
-    @Override
-    @Nullable
-    public BlockPos getTargetPos() {
-        PathNavigation active = active();
-        return active == null ? null : active.getTargetPos();
-    }
-
-    @Override
-    public boolean shouldRecomputePath(BlockPos pos) {
-        PathNavigation active = active();
-        return active != null && active.shouldRecomputePath(pos);
-    }
-
-    @Override
-    public float getMaxDistanceToWaypoint() {
-        PathNavigation active = active();
-        return active == null ? 0.5F : active.getMaxDistanceToWaypoint();
-    }
-
-    @Override
-    public boolean isStableDestination(BlockPos pos) {
-        return original.isStableDestination(pos);
-    }
-
-    @Override
-    public NodeEvaluator getNodeEvaluator() {
-        PathNavigation active = active();
-        return active == null ? original.getNodeEvaluator() : active.getNodeEvaluator();
-    }
-
-    @Override
-    public boolean canFloat() {
-        return original.canFloat();
-    }
-
-    @Override
-    public void setCanFloat(boolean canFloat) {
-        original.setCanFloat(canFloat);
-    }
-
-    @Override
-    public void resetMaxVisitedNodesMultiplier() {
-        original.resetMaxVisitedNodesMultiplier();
-    }
-
-    @Override
-    public void setMaxVisitedNodesMultiplier(float multiplier) {
-        original.setMaxVisitedNodesMultiplier(multiplier);
+        return motion.query(member, () -> {
+            try {
+                Object result = (Object) call.handle.invokeExact(motion.bodyNavigation(), arguments);
+                return result == null ? EMPTY : new Result(result);
+            } catch (RuntimeException | Error failure) {
+                throw failure;
+            } catch (Throwable failure) {
+                throw new IllegalStateException("Native navigation request failed: " + signature, failure);
+            }
+        });
     }
 }

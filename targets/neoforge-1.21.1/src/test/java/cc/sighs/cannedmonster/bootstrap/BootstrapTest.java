@@ -43,6 +43,52 @@ class BootstrapTest {
     }
 
     @Test
+    void skipsModuleDescriptors() throws Exception {
+        ClassWriter writer = new ClassWriter(0);
+        writer.visit(Opcodes.V9, Opcodes.ACC_MODULE, "module-info", null, null, null);
+        writer.visitModule("example.module", 0, null).visitEnd();
+        writer.visitEnd();
+        Files.write(temporary.resolve("module-info.class"), writer.toByteArray());
+        assertTrue(BytecodeIndex.scan(List.of(temporary)).isEmpty());
+    }
+
+    @Test
+    void selectsOnlyTheEffectiveMultiReleaseClass() throws Exception {
+        Files.createDirectories(temporary.resolve("META-INF"));
+        Files.writeString(temporary.resolve("META-INF/MANIFEST.MF"), "Manifest-Version: 1.0\r\nMulti-Release: true\r\n\r\n");
+        writeVariant("", "base");
+        writeVariant("META-INF/versions/9/", "old");
+        writeVariant("META-INF/versions/" + Runtime.version().feature() + "/", "current");
+        Path future = temporary.resolve("META-INF/versions/" + (Runtime.version().feature() + 1) + "/unknown/Example.class");
+        Files.createDirectories(future.getParent());
+        Files.writeString(future, "must not parse future bytecode");
+        assertEquals("current", BytecodeIndex.scan(List.of(temporary)).get("unknown/Example").fields.getFirst().name);
+        Path jar = temporary.resolve("multi-release.jar");
+        try (var output = new java.util.zip.ZipOutputStream(Files.newOutputStream(jar)); var paths = Files.walk(temporary)) {
+            for (Path path : paths.filter(Files::isRegularFile).filter(path -> !path.equals(jar)).toList()) {
+                output.putNextEntry(new java.util.zip.ZipEntry(temporary.relativize(path).toString().replace('\\', '/')));
+                Files.copy(path, output);
+                output.closeEntry();
+            }
+        }
+        try (var filesystem = java.nio.file.FileSystems.newFileSystem(jar)) {
+            assertEquals("current", BytecodeIndex.scan(List.of(filesystem.getPath("/"))).get("unknown/Example").fields.getFirst().name);
+        }
+        Files.writeString(temporary.resolve("META-INF/MANIFEST.MF"), "Manifest-Version: 1.0\r\n\r\n");
+        assertEquals("base", BytecodeIndex.scan(List.of(temporary)).get("unknown/Example").fields.getFirst().name);
+    }
+
+    private void writeVariant(String prefix, String field) throws Exception {
+        ClassWriter writer = new ClassWriter(0);
+        writer.visit(Opcodes.V21, Opcodes.ACC_PUBLIC, "unknown/Example", null, "java/lang/Object", null);
+        writer.visitField(Opcodes.ACC_PUBLIC, field, "I", null, null).visitEnd();
+        writer.visitEnd();
+        Path path = temporary.resolve(prefix + "unknown/Example.class");
+        Files.createDirectories(path.getParent());
+        Files.write(path, writer.toByteArray());
+    }
+
+    @Test
     void rejectsMissingIndexRoots() {
         assertThrows(IllegalStateException.class, () -> BytecodeIndex.scan(List.of(temporary.resolve("missing"))));
     }

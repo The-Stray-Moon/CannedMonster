@@ -39,9 +39,11 @@ public final class FusionPursuit {
         if (body.level().isClientSide || body.level() != target.level() || body.getControllingPassenger() != null) {
             return;
         }
+        Mob caller = BodyLinks.isFacet(mob) ? mob : motion.caller();
+        if (!motion.mayPath(caller)) return;
         Pursuit pursuit = motion.pursuit();
-        boolean same = pursuit.target == target && pursuit.owner == caller(motion);
-        pursuit.owner = caller(motion);
+        boolean same = pursuit.target == target && pursuit.owner == caller;
+        pursuit.owner = caller;
         pursuit.target = target;
         pursuit.timing.refresh(body.tickCount, body.distanceTo(target), same);
     }
@@ -119,11 +121,6 @@ public final class FusionPursuit {
                 + " direct=" + pursuit.timing.direct()
                 + " window=" + pursuit.timing.window()
                 + " windowDistance=" + pursuit.timing.windowDistance();
-    }
-
-    private static Mob caller(FusionMotion motion) {
-        Object current = OrderedCalls.currentMember();
-        return current instanceof Mob mob && motion.owns(mob) ? mob : motion.body();
     }
 
     private static void steer(Mob body, LivingEntity target) {

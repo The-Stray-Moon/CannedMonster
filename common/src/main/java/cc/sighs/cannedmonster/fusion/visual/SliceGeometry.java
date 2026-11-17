@@ -6,6 +6,59 @@ import java.util.List;
 public final class SliceGeometry {
     private SliceGeometry() {}
 
+    public static final class Workspace {
+        private final int stride;
+        private float[] first;
+        private float[] second;
+        private float[] result;
+
+        public Workspace(int stride) {
+            this.stride = stride;
+            first = new float[8 * stride];
+            second = new float[8 * stride];
+        }
+
+        public float[] vertices() { return result; }
+
+        public int clip(float[] source, int offset, int count, int axis, float lower, float upper) {
+            int capacity = (count + 4) * stride;
+            if (first.length < capacity) {
+                first = new float[capacity];
+                second = new float[capacity];
+            }
+            System.arraycopy(source, offset, first, 0, count * stride);
+            count = plane(first, second, count, axis, lower, true);
+            count = plane(second, first, count, axis, upper, false);
+            result = first;
+            return count;
+        }
+
+        private int plane(float[] input, float[] output, int count, int axis, float boundary, boolean above) {
+            if (count == 0) return 0;
+            if (!Float.isFinite(boundary)) {
+                System.arraycopy(input, 0, output, 0, count * stride);
+                return count;
+            }
+            int emitted = 0;
+            int previous = (count - 1) * stride;
+            boolean previousInside = above ? input[previous + axis] >= boundary : input[previous + axis] <= boundary;
+            for (int current = 0; current < count * stride; current += stride) {
+                boolean inside = above ? input[current + axis] >= boundary : input[current + axis] <= boundary;
+                if (inside != previousInside) {
+                    float t = (boundary - input[previous + axis]) / (input[current + axis] - input[previous + axis]);
+                    for (int i = 0; i < stride; i++) output[emitted * stride + i] = input[previous + i] + t * (input[current + i] - input[previous + i]);
+                    output[emitted++ * stride + axis] = boundary;
+                }
+                if (inside) {
+                    System.arraycopy(input, current, output, emitted++ * stride, stride);
+                }
+                previous = current;
+                previousInside = inside;
+            }
+            return emitted;
+        }
+    }
+
     public static List<float[]> clip(List<float[]> polygon, int axis, float lower, float upper) {
         return plane(plane(polygon, axis, lower, true), axis, upper, false);
     }

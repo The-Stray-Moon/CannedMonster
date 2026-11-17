@@ -7,7 +7,6 @@ import java.util.*;
 import java.util.function.Consumer;
 
 public final class OrderedCalls {
-    private static final Map<Object, Session> SESSIONS = Collections.synchronizedMap(new IdentityHashMap<>());
     private static final ThreadLocal<Deque<Frame>> FRAMES = ThreadLocal.withInitial(ArrayDeque::new);
     private static final ClassValue<Map<String, MethodHandle>> METHODS = new ClassValue<>() {
         @Override
@@ -20,7 +19,14 @@ public final class OrderedCalls {
                         methods.put(name, MethodHandles.privateLookupIn(player, MethodHandles.lookup())
                                 .findSpecial(player, name, MethodType.methodType(void.class), player));
                     } else {
-                        methods.put(name, MethodHandles.publicLookup().findVirtual(type, name, MethodType.methodType(void.class)));
+                        Class<?> contract = type;
+                        for (Class<?> parent = type; parent != null; parent = parent.getSuperclass()) {
+                            if (!java.lang.reflect.Modifier.isPublic(parent.getModifiers())) continue;
+                            try {
+                                if (java.lang.reflect.Modifier.isPublic(parent.getDeclaredMethod(name).getModifiers())) contract = parent;
+                            } catch (NoSuchMethodException ignored) {}
+                        }
+                        methods.put(name, MethodHandles.publicLookup().findVirtual(contract, name, MethodType.methodType(void.class)));
                     }
                 } catch (ReflectiveOperationException exception) {
                     throw new IllegalStateException("Missing lifecycle entry " + type.getName() + "." + name, exception);
@@ -36,11 +42,19 @@ public final class OrderedCalls {
     public static void bind(Object host, List<?> facets, Consumer<Object> aiBoundary) {
         List<Object> members = new ArrayList<>(facets);
         members.add(host);
-        SESSIONS.put(host, new Session(List.copyOf(members), aiBoundary));
+        Session calls = new Session(List.copyOf(members), aiBoundary);
+        if (BodyLinks.session(host) instanceof FusionSession session) session.calls = calls;
+        else BodyLinks.session(host, calls);
     }
 
     public static void unbind(Object host) {
-        SESSIONS.remove(host);
+        if (BodyLinks.session(host) instanceof FusionSession session) session.calls = null;
+        else BodyLinks.session(host, null);
+    }
+
+    private static Session session(Object host) {
+        Object value = BodyLinks.session(host);
+        return value instanceof FusionSession session ? session.calls : value instanceof Session calls ? calls : null;
     }
 
     public static Object currentMember() {
@@ -51,7 +65,7 @@ public final class OrderedCalls {
     public static boolean dispatch(Object receiver, String method, boolean boundary) {
         Object host = BodyLinks.body(receiver);
         if (host instanceof net.minecraft.world.entity.player.Player player && (!player.isAlive() || player.isRemoved())) return false;
-        Session session = SESSIONS.get(host);
+        Session session = session(host);
         if (session == null) {
             return false;
         }
@@ -117,7 +131,7 @@ public final class OrderedCalls {
         }
     }
 
-    private record Session(List<Object> members, Consumer<Object> aiBoundary) {
+    record Session(List<Object> members, Consumer<Object> aiBoundary) {
     }
 
     private static final class Frame {

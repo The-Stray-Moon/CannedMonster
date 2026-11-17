@@ -13,6 +13,8 @@ import java.util.*;
 public final class ClientAppearance {
     private static final Map<UUID, View> VIEWS = new HashMap<>();
     private static final Map<UUID, Long> REVISIONS = new HashMap<>();
+    private static final LinkedHashMap<UUID, Long> TOMBSTONES = new LinkedHashMap<>();
+    private static final EquipmentSlot[] EQUIPMENT = EquipmentSlot.values();
     private static final Deque<MemberEvent> PENDING = new ArrayDeque<>();
     private static ClientLevel level;
     private static long clock;
@@ -22,22 +24,41 @@ public final class ClientAppearance {
     private static final class Member {
         final UUID id;
         final Mob entity;
+        final Map<Integer, net.minecraft.network.syncher.SynchedEntityData.DataItem<?>> dataById;
         long eventSequence = -1;
 
-        Member(UUID id, Mob entity) { this.id = id; this.entity = entity; }
+        Member(UUID id, Mob entity) {
+            this.id = id;
+            this.entity = entity;
+            this.dataById = new HashMap<>();
+            for (var item : ((AppearanceData) entity.getEntityData()).cannedmonster$items()) dataById.put(item.getAccessor().id(), item);
+        }
     }
-    private record View(int entityId, List<Member> members, int control, boolean flying, long received) {}
+    private record View(int entityId, List<Member> members, List<Mob> entities, int control, boolean flying, long received) {
+        View(int entityId, List<Member> members, int control, boolean flying, long received) {
+            this(entityId, members, members.stream().map(member -> member.entity).toList(), control, flying, received);
+        }
+    }
 
     private ClientAppearance() {}
 
     public static void receive(FusionAppearance packet) {
         checkLevel();
         if (level == null || packet.revision() <= REVISIONS.getOrDefault(packet.bodyId(), -1L)) return;
-        REVISIONS.put(packet.bodyId(), packet.revision());
         View old = VIEWS.get(packet.bodyId());
+        if (!packet.full() && (old == null || old.entityId != packet.entityId()
+                || packet.members().size() != old.members.size())) return;
+        if (!packet.full()) {
+            for (int i = 0; i < old.members.size(); i++) {
+                if (!old.members.get(i).id.equals(packet.members().get(i).id())) return;
+            }
+        }
+        REVISIONS.put(packet.bodyId(), packet.revision());
+        TOMBSTONES.remove(packet.bodyId());
         if (packet.members().isEmpty()) {
             if (old != null) dispose(old);
             VIEWS.remove(packet.bodyId());
+            retire(packet.bodyId());
             return;
         }
         Map<UUID, Member> previous = new HashMap<>();
@@ -56,7 +77,7 @@ public final class ClientAppearance {
                 DisplayExecution.register(created);
                 member = new Member(state.id(), created);
             }
-            apply(member.entity, state.data(), fresh);
+            apply(member, state.data(), fresh);
             if (member.entity instanceof PresentationState presentation) presentation.cannedmonster$applyPresentation(state.presentation(), fresh);
             members.add(member);
         }
@@ -66,12 +87,13 @@ public final class ClientAppearance {
                 packet.flying(), clock));
     }
 
-    private static void apply(Mob entity, List<net.minecraft.network.syncher.SynchedEntityData.DataValue<?>> values, boolean fresh) {
-        var items = ((AppearanceData) entity.getEntityData()).cannedmonster$items();
+    private static void apply(Member member, List<net.minecraft.network.syncher.SynchedEntityData.DataValue<?>> values, boolean fresh) {
+        Mob entity = member.entity;
+        var items = member.dataById;
         List<net.minecraft.network.syncher.SynchedEntityData.DataValue<?>> changed = new ArrayList<>();
         for (var value : values) {
-            var item = Arrays.stream(items).filter(candidate -> candidate.getAccessor().id() == value.id()).findFirst()
-                    .orElseThrow(() -> new IllegalArgumentException("Unknown display data accessor " + value.id()));
+            var item = items.get(value.id());
+            if (item == null) throw new IllegalArgumentException("Unknown display data accessor " + value.id());
             if (!Objects.equals(item.getAccessor().serializer(), value.serializer())) {
                 throw new IllegalArgumentException("Mismatched display data serializer " + value.id());
             }
@@ -127,8 +149,13 @@ public final class ClientAppearance {
             View view = entry.getValue();
             var body = level.getEntity(view.entityId);
             boolean expired = body == null ? clock - view.received > 100 : body.isRemoved() || !body.getUUID().equals(entry.getKey());
-            if (expired) dispose(view);
+            if (expired) { dispose(view); retire(entry.getKey()); }
             return expired;
+        });
+        TOMBSTONES.entrySet().removeIf(entry -> {
+            if (clock - entry.getValue() <= 200) return false;
+            REVISIONS.remove(entry.getKey());
+            return true;
         });
         PENDING.removeIf(ClientAppearance::dispatch);
         for (var entry : VIEWS.entrySet()) {
@@ -146,6 +173,16 @@ public final class ClientAppearance {
         }
         ClientMemberEvents.prune();
         applyLocalGravity();
+    }
+
+    private static void retire(UUID id) {
+        TOMBSTONES.remove(id);
+        TOMBSTONES.put(id, clock);
+        while (TOMBSTONES.size() > 4096) {
+            UUID oldest = TOMBSTONES.keySet().iterator().next();
+            TOMBSTONES.remove(oldest);
+            REVISIONS.remove(oldest);
+        }
     }
 
     private static void dispose(View view) {
@@ -182,6 +219,7 @@ public final class ClientAppearance {
             VIEWS.values().forEach(ClientAppearance::dispose);
             VIEWS.clear();
             REVISIONS.clear();
+            TOMBSTONES.clear();
             PENDING.clear();
             level = current;
         }
@@ -210,7 +248,7 @@ public final class ClientAppearance {
         checkLevel();
         View view = VIEWS.get(body.getUUID());
         if (view == null || view.entityId != body.getId()) return List.of();
-        return view.members.stream().map(member -> member.entity).toList();
+        return view.entities;
     }
 
     public static void pose(Mob member, LivingEntity body) {
@@ -237,6 +275,11 @@ public final class ClientAppearance {
         ((AppearanceWalk) member.walkAnimation).cannedmonster$copy(body.walkAnimation);
         member.setDeltaMovement(body.getDeltaMovement());
         member.setOnGround(body.onGround());
-        for (EquipmentSlot slot : EquipmentSlot.values()) member.setItemSlot(slot, body.getItemBySlot(slot).copy());
+        for (EquipmentSlot slot : EQUIPMENT) {
+            var equipment = body.getItemBySlot(slot);
+            if (!net.minecraft.world.item.ItemStack.matches(member.getItemBySlot(slot), equipment)) {
+                member.setItemSlot(slot, equipment.copy());
+            }
+        }
     }
 }

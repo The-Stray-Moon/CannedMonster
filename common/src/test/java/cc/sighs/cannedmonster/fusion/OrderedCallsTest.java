@@ -27,6 +27,18 @@ public class OrderedCallsTest {
     }
 
     @Test
+    void keepsSchedulingOnTheInstanceSlotAndClearsItOnUnbind() {
+        Native host = new Native("host", new ArrayList<>());
+        Native facet = new Native("facet", host.trace);
+        bind(host, facet);
+        assertInstanceOf(OrderedCalls.Session.class, host.cannedmonster$session());
+        assertSame(host.cannedmonster$session(), BodyLinks.session(facet));
+        unbind(host, facet);
+        assertNull(host.cannedmonster$session());
+        assertFalse(OrderedCalls.dispatch(host, "tick", false));
+    }
+
+    @Test
     void missingSuperDoesNotPreventLaterMemberFromRunning() {
         Native host = new Native("host", new ArrayList<>());
         Native facet = new Native("facet", host.trace);
@@ -58,6 +70,40 @@ public class OrderedCallsTest {
         }
     }
 
+    @Test
+    void dispatchesNonPublicOverridesThroughTheirPublicContract() {
+        Native host = new HiddenNative("host", new ArrayList<>());
+        Native facet = new HiddenNative("facet", host.trace);
+        bind(host, facet);
+        try {
+            host.tick();
+            assertEquals(1, host.bodyTicks);
+            assertEquals(1, host.aiCalls);
+            assertEquals(1, facet.aiCalls);
+            assertTrue(host.trace.contains("facet.hidden.tick"));
+            assertTrue(host.trace.contains("host.hidden.tick"));
+            assertTrue(host.trace.contains("facet.hidden.ai"));
+        } finally {
+            unbind(host, facet);
+        }
+    }
+
+    private static final class HiddenNative extends Native {
+        HiddenNative(String name, List<String> trace) { super(name, trace); }
+
+        @Override
+        public void tick() {
+            trace.add(name + ".hidden.tick");
+            super.tick();
+        }
+
+        @Override
+        public void aiStep() {
+            trace.add(name + ".hidden.ai");
+            super.aiStep();
+        }
+    }
+
     private static void bind(Native host, Native facet) {
         BodyLinks.bind(facet, host, facet.data, host.data);
         OrderedCalls.bind(host, List.of(facet), ignored -> {});
@@ -68,7 +114,7 @@ public class OrderedCallsTest {
         BodyLinks.unbind(facet, facet.data);
     }
 
-    public static final class Native implements BoundObject {
+    public static class Native implements BoundObject {
         final String name;
         final List<String> trace;
         final Object data = new Object();
@@ -114,6 +160,14 @@ public class OrderedCallsTest {
             trace.add(name + ".ai");
             OrderedCalls.dispatch(this, "aiStep", true);
         }
+
+        private Object session;
+
+        @Override
+        public Object cannedmonster$session() { return session; }
+
+        @Override
+        public void cannedmonster$session(Object session) { this.session = session; }
 
         @Override
         public Object cannedmonster$body() {

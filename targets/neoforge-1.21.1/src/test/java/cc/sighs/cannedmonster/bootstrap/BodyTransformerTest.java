@@ -73,6 +73,77 @@ class BodyTransformerTest {
     }
 
     @Test
+    void retainsOnlyIndependentClassLayoutsAfterDiscovery() throws Exception {
+        var source = fixture();
+        var transformer = new BodyTransformer(source);
+        var field = BodyTransformer.class.getDeclaredField("index");
+        field.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Map<String, ClassNode> layouts = (Map<String, ClassNode>) field.get(transformer);
+        assertTrue(layouts.values().stream().allMatch(node -> node.methods.isEmpty()));
+        assertNotSame(source.get(MOB), layouts.get(MOB));
+        assertFalse(source.get(MOB).methods.isEmpty());
+        assertNotSame(source.get(MOB).fields.getFirst(), layouts.get(MOB).fields.getFirst());
+        assertTrue(transformer.targets().contains(SPECIES.replace('/', '.')));
+        var transformed = transformer.transform(source.get(SPECIES));
+        assertTrue(calls(method(transformed, "readFire"), ENTITY, "cannedmonster$read$remainingFireTicks"));
+    }
+
+    @Test
+    void toleratesNullParentsAndModuleDescriptorsInTheIndex() {
+        var index = fixture();
+        ClassNode module = new ClassNode();
+        module.name = "module-info";
+        module.access = Opcodes.ACC_MODULE;
+        index.put(module.name, module);
+        ClassNode root = new ClassNode();
+        root.name = "java/lang/Object";
+        index.put(root.name, root);
+        var transformer = new BodyTransformer(index);
+        assertSame(module, transformer.transform(module));
+        assertTrue(module.fields.isEmpty());
+        assertTrue(module.methods.isEmpty());
+        assertFalse(transformer.targets().contains("module-info"));
+    }
+
+    @Test
+    void leavesNativeAndAbstractMethodsWithoutCodeAcrossAllInjectionSites() throws Exception {
+        for (int access : java.util.List.of(Opcodes.ACC_NATIVE, Opcodes.ACC_ABSTRACT)) {
+            var index = fixture();
+            for (String owner : java.util.List.of(ENTITY, LIVING, MOB, SPECIES, NAVIGATION,
+                    "net/minecraft/network/syncher/SynchedEntityData")) {
+                ClassNode node = index.computeIfAbsent(owner, name -> type(name, "java/lang/Object"));
+                node.methods.clear();
+                for (String signature : java.util.List.of("tick()V", "aiStep()V", "travel(Lnet/minecraft/world/phys/Vec3;)V",
+                        "hurt(Lnet/minecraft/world/damagesource/DamageSource;F)Z",
+                        "remove(Lnet/minecraft/world/entity/Entity$RemovalReason;)V", "stop()V",
+                        "getNavigation()Lnet/minecraft/world/entity/ai/navigation/PathNavigation;",
+                        "createPath(Lnet/minecraft/world/entity/Entity;I)Lnet/minecraft/world/level/pathfinder/Path;",
+                        "set(Lnet/minecraft/network/syncher/EntityDataAccessor;Ljava/lang/Object;)V")) {
+                    int split = signature.indexOf('(');
+                    node.methods.add(new MethodNode(Opcodes.ACC_PUBLIC | access, signature.substring(0, split), signature.substring(split), null, null));
+                }
+            }
+            var transformer = new BodyTransformer(index);
+            for (ClassNode node : index.values()) {
+                var declarations = java.util.List.copyOf(node.methods);
+                transformer.transform(node);
+                for (MethodNode method : declarations) {
+                    assertEquals(0, method.instructions.size(), node.name + "." + method.name);
+                    assertEquals(0, method.tryCatchBlocks.size());
+                    assertEquals(Opcodes.ACC_PUBLIC | access, method.access);
+                }
+                ClassWriter writer = new ClassWriter(0);
+                node.accept(writer);
+                ClassNode roundTrip = new ClassNode();
+                new org.objectweb.asm.ClassReader(writer.toByteArray()).accept(roundTrip, 0);
+                assertTrue(roundTrip.methods.stream().filter(method -> (method.access & access) != 0)
+                        .allMatch(method -> method.instructions.size() == 0));
+            }
+        }
+    }
+
+    @Test
     void unknownOverrideContinuesAtSuperAndUnwindsAfterBody() throws Exception {
         Map<String, ClassNode> index = fixture();
         ClassNode mob = index.get(MOB);
@@ -242,11 +313,52 @@ class BodyTransformerTest {
         assertTrue(calls(transformedRiding, "cc/sighs/cannedmonster/fusion/BodyLinks", "body"));
 
         ClassNode transformedMob = transformer.transform(mob, null);
-        assertTrue(calls(method(transformedMob, "getNavigation"), "cc/sighs/cannedmonster/fusion/FusionMotion", "navigation"));
-
+        assertFalse(calls(method(transformedMob, "getNavigation"), "cc/sighs/cannedmonster/fusion/FusionMotion", "navigation"));
         ClassNode transformedNavigation = transformer.transform(navigation, null);
+        assertTrue(calls(method(transformedNavigation, "moveTo"),
+                "cc/sighs/cannedmonster/fusion/FusionNavigation", "dispatch"));
         assertTrue(calls(method(transformedNavigation, "stop"), "cc/sighs/cannedmonster/fusion/FusionMotion", "guardStop"));
         assertTrue(calls(method(transformedNavigation, "moveTo"), "cc/sighs/cannedmonster/fusion/FusionMotion", "guardMoveTo"));
+    }
+
+    @Test
+    void navigationOverridesKeepTheirClassAndConfigurationWhileRequestsGetTypedGuards() throws Exception {
+        var index = fixture();
+        ClassNode navigation = type(NAVIGATION, "java/lang/Object");
+        navigation.fields.add(new FieldNode(Opcodes.ACC_PROTECTED, "mob", "L" + MOB + ";", null, null));
+        ClassNode custom = type("unknown/CustomNavigation", NAVIGATION);
+        String[] signatures = {"moveTo(DDDD)Z", "moveTo(DDDID)Z", "stop()V", "getMaxDistanceToWaypoint()F",
+                "createPath(Ljava/util/Set;IZIF)Lnet/minecraft/world/level/pathfinder/Path;", "setCanFloat(Z)V"};
+        for (String signature : signatures) {
+            int split = signature.indexOf('(');
+            for (ClassNode node : java.util.List.of(navigation, custom)) {
+                MethodNode method = new MethodNode(Opcodes.ACC_PUBLIC, signature.substring(0, split), signature.substring(split), null, null);
+                var result = org.objectweb.asm.Type.getReturnType(method.desc);
+                if (result.equals(org.objectweb.asm.Type.BOOLEAN_TYPE)) method.instructions.add(new InsnNode(Opcodes.ICONST_0));
+                else if (result.equals(org.objectweb.asm.Type.FLOAT_TYPE)) method.instructions.add(new InsnNode(Opcodes.FCONST_0));
+                else if (result.getSort() == org.objectweb.asm.Type.OBJECT) method.instructions.add(new InsnNode(Opcodes.ACONST_NULL));
+                method.instructions.add(new InsnNode(result.getOpcode(Opcodes.IRETURN)));
+                if (result.equals(org.objectweb.asm.Type.VOID_TYPE)) method.instructions.set(method.instructions.getLast(), new InsnNode(Opcodes.RETURN));
+                node.methods.add(method);
+            }
+        }
+        index.put(navigation.name, navigation);
+        index.put(custom.name, custom);
+        BodyTransformer transformer = new BodyTransformer(index);
+        transformer.transform(custom);
+        assertEquals(NAVIGATION, custom.superName);
+        assertFalse(calls(method(custom, "setCanFloat"), "cc/sighs/cannedmonster/fusion/FusionNavigation", "dispatch"));
+        for (MethodNode method : custom.methods) {
+            if (method.name.equals("<init>") || method.name.equals("setCanFloat")) continue;
+            assertTrue(calls(method, "cc/sighs/cannedmonster/fusion/FusionNavigation", "dispatch"));
+        }
+        ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        custom.accept(writer);
+        ClassNode checked = new ClassNode();
+        new org.objectweb.asm.ClassReader(writer.toByteArray()).accept(checked, 0);
+        for (MethodNode method : checked.methods) {
+            new org.objectweb.asm.tree.analysis.Analyzer<>(new org.objectweb.asm.tree.analysis.BasicVerifier()).analyze(checked.name, method);
+        }
     }
 
     @Test

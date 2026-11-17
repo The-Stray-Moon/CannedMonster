@@ -19,8 +19,23 @@ import java.util.*;
 
 public final class FusionRuntime {
     static final String SAVE_KEY = "cannedmonster:fusion";
-    private static final Map<LivingEntity, List<Mob>> SESSIONS = Collections.synchronizedMap(new IdentityHashMap<>());
-    private static final Map<LivingEntity, List<Map<ResourceLocation, Double>>> ATTRIBUTE_ORIGINS = new IdentityHashMap<>();
+    private static final Set<LivingEntity> HOSTS = Collections.newSetFromMap(new IdentityHashMap<>());
+    private static final Map<UUID, LivingEntity> MEMBER_OWNERS = new HashMap<>();
+
+    private static FusionSession session(LivingEntity body) {
+        return body instanceof BoundObject bound && bound.cannedmonster$session() instanceof FusionSession session ? session : null;
+    }
+
+    static UUID identity(Mob member) {
+        if (BodyLinks.body(member) instanceof LivingEntity body) {
+            FusionSession session = session(body);
+            if (session != null) {
+                UUID id = session.identities.get(member);
+                if (id != null) return id;
+            }
+        }
+        return member.getUUID();
+    }
     private static boolean initialized;
 
     private FusionRuntime() {}
@@ -56,18 +71,24 @@ public final class FusionRuntime {
 
     static void attach(LivingEntity host, List<Mob> facets, List<Map<ResourceLocation, Double>> origins) {
         initialize();
-        if (host.level().isClientSide || facets.isEmpty() || SESSIONS.containsKey(host) || BodyLinks.isFacet(host)) {
+        if (host.level().isClientSide || facets.isEmpty() || session(host) != null || BodyLinks.isFacet(host)) {
             throw new IllegalArgumentException("Fusion requires an independent server body and members");
         }
         Set<LivingEntity> unique = Collections.newSetFromMap(new IdentityHashMap<>());
+        Set<UUID> identities = new HashSet<>();
+        identities.add(host.getUUID());
         unique.add(host);
         for (Mob facet : facets) {
             if (!unique.add(facet) || facet.level() != host.level() || facet.isAddedToLevel()
-                    || facet.isRemoved() || BodyLinks.isFacet(facet) || SESSIONS.containsKey(facet)) {
+                    || facet.isRemoved() || BodyLinks.isFacet(facet) || session(facet) != null) {
                 throw new IllegalArgumentException("Members must be distinct unregistered mobs in the body's level");
+            }
+            if (!identities.add(facet.getUUID()) || MEMBER_OWNERS.containsKey(facet.getUUID())) {
+                throw new IllegalArgumentException("Fusion member UUID is already owned by a body");
             }
         }
         if (origins.size() != facets.size() + 1) throw new IllegalArgumentException("Fusion attribute origins mismatch");
+        FusionSession session = new FusionSession(host, facets, origins);
         List<Mob> bound = new ArrayList<>();
         var originalState = AttributeAverages.snapshot(host);
         try {
@@ -83,18 +104,16 @@ public final class FusionRuntime {
                     facet.getBrain().eraseMemory(net.minecraft.world.entity.ai.memory.MemoryModuleType.ATTACK_TARGET);
                 }
             }
-            SESSIONS.put(host, List.copyOf(facets));
-            ATTRIBUTE_ORIGINS.put(host, List.copyOf(origins));
-            if (host instanceof Mob mob) {
-                BodyLinks.session(host, new FusionMotion(mob, facets));
-                mob.setPersistenceRequired();
-            }
+            BodyLinks.session(host, session);
+            HOSTS.add(host);
+            session.identities.values().forEach(id -> MEMBER_OWNERS.put(id, host));
+            if (host instanceof Mob mob) mob.setPersistenceRequired();
             OrderedCalls.bind(host, facets, FusionRuntime::aiBoundary);
             if (host instanceof Player player) FlightRules.refresh(player);
         } catch (RuntimeException exception) {
             OrderedCalls.unbind(host);
-            SESSIONS.remove(host);
-            ATTRIBUTE_ORIGINS.remove(host);
+            HOSTS.remove(host);
+            session.identities.values().forEach(id -> MEMBER_OWNERS.remove(id, host));
             BodyLinks.session(host, null);
             bound.forEach(facet -> BodyLinks.unbind(facet, facet.getEntityData()));
             if (host instanceof Player player) {
@@ -108,19 +127,19 @@ public final class FusionRuntime {
     }
 
     static List<Map<ResourceLocation, Double>> originsOf(LivingEntity host) {
-        var saved = ATTRIBUTE_ORIGINS.get(host);
-        return saved == null ? List.of(AttributeAverages.capture(host)) : saved;
+        FusionSession session = session(host);
+        return session == null ? List.of(AttributeAverages.capture(host)) : session.origins;
     }
 
     static void baseChanged(LivingEntity body, ResourceLocation attribute, double value) {
         if (!(body instanceof Player) || !Double.isFinite(value)) return;
-        var origins = ATTRIBUTE_ORIGINS.get(body);
-        if (origins == null) return;
-        List<Map<ResourceLocation, Double>> updated = new ArrayList<>(origins);
-        Map<ResourceLocation, Double> own = new HashMap<>(origins.getLast());
+        FusionSession session = session(body);
+        if (session == null) return;
+        List<Map<ResourceLocation, Double>> updated = new ArrayList<>(session.origins);
+        Map<ResourceLocation, Double> own = new HashMap<>(session.origins.getLast());
         own.put(attribute, value);
         updated.set(updated.size() - 1, Map.copyOf(own));
-        ATTRIBUTE_ORIGINS.put(body, List.copyOf(updated));
+        session.origins = List.copyOf(updated);
         if (body instanceof Player player && attribute.equals(PlayerSpeed.ATTRIBUTE)) PlayerSpeed.refresh(player);
     }
 
@@ -133,15 +152,12 @@ public final class FusionRuntime {
         List<Mob> incomingMembers = List.copyOf(facets(incoming));
         Set<UUID> occupied = new HashSet<>();
         occupied.add(host.getUUID());
-        synchronized (SESSIONS) {
-            SESSIONS.forEach((body, members) -> {
-                if (body != incoming) members.forEach(member -> occupied.add(independentSave(member).getUUID("UUID")));
-            });
-        }
         List<Mob> additions = new ArrayList<>(incomingMembers);
         additions.add(incoming);
         for (Mob member : additions) {
-            if (!occupied.add(independentSave(member).getUUID("UUID"))) {
+            UUID id = identity(member);
+            LivingEntity owner = MEMBER_OWNERS.get(id);
+            if (!occupied.add(id) || owner != null && owner != incoming) {
                 throw new IllegalArgumentException("Fusion member UUID is already owned by a body");
             }
         }
@@ -165,7 +181,8 @@ public final class FusionRuntime {
     }
 
     public static List<Mob> facets(LivingEntity host) {
-        return SESSIONS.getOrDefault(host, List.of());
+        FusionSession session = session(host);
+        return session == null ? List.of() : session.members;
     }
 
     public static Mob peel(LivingEntity host) {
@@ -342,25 +359,25 @@ public final class FusionRuntime {
             PlayerSpeed.clear(player);
             FlightRules.clear(player);
         }
-        ATTRIBUTE_ORIGINS.remove(host);
+        FusionSession session = session(host);
         OrderedCalls.unbind(host);
         BodyLinks.session(host, null);
-        List<Mob> facets = SESSIONS.remove(host);
-        if (facets != null) facets.forEach(facet -> BodyLinks.unbind(facet, facet.getEntityData()));
+        HOSTS.remove(host);
+        if (session != null) {
+            session.identities.values().forEach(id -> MEMBER_OWNERS.remove(id, host));
+            session.members.forEach(facet -> BodyLinks.unbind(facet, facet.getEntityData()));
+        }
     }
 
     public static void refreshFlights() {
-        List<LivingEntity> hosts;
-        synchronized (SESSIONS) { hosts = List.copyOf(SESSIONS.keySet()); }
-        for (LivingEntity host : hosts) {
+        for (LivingEntity host : List.copyOf(HOSTS)) {
             if (host instanceof Player player) FlightRules.refresh(player);
         }
     }
 
     public static void clear() {
-        List<LivingEntity> hosts;
-        synchronized (SESSIONS) { hosts = List.copyOf(SESSIONS.keySet()); }
-        hosts.forEach(FusionRuntime::detach);
+        List.copyOf(HOSTS).forEach(FusionRuntime::detach);
+        MEMBER_OWNERS.clear();
         FlightRules.clearAll();
         PlayerFusion.clear();
         RidingState.clear();
