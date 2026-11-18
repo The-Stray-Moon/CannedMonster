@@ -1,0 +1,6 @@
+{
+  "model": {
+    "type": "minecraft:model",
+    "model": "cannedmonster:item/throwable_monster_can"
+  }
+}

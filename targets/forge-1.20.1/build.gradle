@@ -14,11 +14,47 @@ java {
     toolchain.languageVersion = JavaLanguageVersion.of(17)
 }
 
+dependencies {
+    compileOnly 'org.spongepowered:mixin:0.8.5'
+    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+}
+
 sourceSets.main.resources.srcDir 'src/generated/resources'
 
-commonJava {
-    // Exclude only common files with confirmed differences for this target.
+sourceSets {
+    bootstrap {
+        compileClasspath += sourceSets.main.compileClasspath
+    }
+    test {
+        compileClasspath += sourceSets.bootstrap.output + sourceSets.bootstrap.compileClasspath
+        runtimeClasspath += sourceSets.bootstrap.output + sourceSets.bootstrap.compileClasspath
+    }
 }
+
+commonJava {
+    // Files whose 1.21.1 implementation is confirmed incompatible with 1.20.1.
+    exclude 'cc/sighs/cannedmonster/can/CanActions.java'
+    exclude 'cc/sighs/cannedmonster/can/CanContents.java'
+    exclude 'cc/sighs/cannedmonster/can/MonsterCanItem.java'
+    exclude 'cc/sighs/cannedmonster/fusion/AttributeAverages.java'
+    exclude 'cc/sighs/cannedmonster/fusion/FusionPursuit.java'
+    exclude 'cc/sighs/cannedmonster/fusion/FusionTraits.java'
+    exclude 'cc/sighs/cannedmonster/fusion/NativeAttributeAccess.java'
+    exclude 'cc/sighs/cannedmonster/fusion/PlayerFusion.java'
+    exclude 'cc/sighs/cannedmonster/fusion/PlayerSpeed.java'
+    exclude 'cc/sighs/cannedmonster/fusion/RidingState.java'
+    exclude 'cc/sighs/cannedmonster/fusion/visual/AppearanceSync.java'
+    exclude 'cc/sighs/cannedmonster/fusion/visual/FusionAppearance.java'
+    exclude 'cc/sighs/cannedmonster/fusion/visual/MemberEvent.java'
+    exclude 'cc/sighs/cannedmonster/fusion/visual/SliceBuffers.java'
+}
+
+mixin {
+    config 'cannedmonster.mixins.json'
+    add sourceSets.main, 'cannedmonster.refmap.json'
+}
+
+def packagedRun = providers.gradleProperty('verifyPackagedMod').isPresent()
 
 legacyForge {
     version = "${forge_minecraft_version}-${forge_version}"
@@ -36,12 +72,14 @@ legacyForge {
 
         server {
             server()
+            gameDirectory = file('run')
             programArgument '--nogui'
             systemProperty 'forge.enabledGameTestNamespaces', project.mod_id
         }
 
         gameTestServer {
             type = "gameTestServer"
+            gameDirectory = file('run')
             systemProperty 'forge.enabledGameTestNamespaces', project.mod_id
         }
 
@@ -57,9 +95,77 @@ legacyForge {
         }
     }
 
-    mods {
-        "${mod_id}" {
-            sourceSet(sourceSets.main)
+    if (!packagedRun) {
+        mods {
+            "${mod_id}" {
+                sourceSet(sourceSets.main)
+            }
+        }
+    }
+}
+
+def bootstrapJar = tasks.register('bootstrapJar', Jar) {
+    from sourceSets.bootstrap.output
+    archiveFileName = 'cannedmonster-bootstrap-dev.jar'
+    destinationDirectory = layout.buildDirectory.dir('bootstrap')
+    manifest.attributes('Automatic-Module-Name': 'cc.sighs.cannedmonster.bootstrap')
+}
+
+tasks.named('assemble').configure { dependsOn bootstrapJar }
+
+def prepareAsmRun = tasks.register('prepareAsmRun') {
+    dependsOn(packagedRun ? tasks.named('reobfJar') : bootstrapJar)
+    dependsOn bootstrapJar
+    doLast {
+        def mods = file('run/mods')
+        mods.mkdirs()
+        delete new File(mods, 'cannedmonster-bootstrap-dev.jar')
+        delete new File(mods, 'cannedmonster-packaged.jar')
+        delete new File(mods, 'cannedmonster-bootstrap.jar')
+        if (packagedRun) {
+            copy {
+                from tasks.named('jar').get().archiveFile
+                into mods
+                rename { 'cannedmonster-packaged.jar' }
+            }
+            copy {
+                from bootstrapJar.get().archiveFile
+                into mods
+                rename { 'cannedmonster-bootstrap.jar' }
+            }
+        } else {
+            copy {
+                from bootstrapJar.get().archiveFile
+                into mods
+                rename { 'cannedmonster-bootstrap-dev.jar' }
+            }
+        }
+    }
+}
+
+tasks.matching { it.name == 'runClient' || it.name == 'runServer' || it.name == 'runGameTestServer' }
+        .configureEach { dependsOn prepareAsmRun }
+
+tasks.named('jar', Jar).configure {
+    manifest {
+        attributes(["Specification-Title"     : mod_id,
+                    "Specification-Vendor"    : mod_authors,
+                    "Specification-Version"   : "1",
+                    "Implementation-Title"    : project.name,
+                    "Implementation-Version"  : project.jar.archiveVersion,
+                    "Implementation-Vendor"   : mod_authors,
+                    "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
+                    "MixinConfigs"            : 'cannedmonster.mixins.json'])
+    }
+    finalizedBy 'reobfJar'
+}
+
+configurations.configureEach {
+    resolutionStrategy.eachDependency { details ->
+        // Forge's eventbus uses a dynamic 0.6.+ range; pin it so Gradle does not
+        // require metadata from the (often unreachable) NeoForged repository.
+        if (details.requested.group == 'net.jodah' && details.requested.name == 'typetools') {
+            details.useVersion '0.6.3'
         }
     }
 }
@@ -90,6 +196,7 @@ repositories {
 }
 
 tasks.named('processResources', ProcessResources).configure {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     def replaceProperties = [
             minecraft_version      : forge_minecraft_version,
             minecraft_version_range: minecraft_version_range,
@@ -111,25 +218,15 @@ tasks.named('processResources', ProcessResources).configure {
     }
 }
 
-tasks.named('jar', Jar).configure {
-    manifest {
-        attributes(["Specification-Title"     : mod_id,
-                    "Specification-Vendor"    : mod_authors,
-                    "Specification-Version"   : "1",
-                    "Implementation-Title"    : project.name,
-                    "Implementation-Version"  : project.jar.archiveVersion,
-                    "Implementation-Vendor"   : mod_authors,
-                    "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")])
-    }
-
-    finalizedBy 'reobfJar'
-}
-
 jacoco {
     toolVersion = '0.8.12'
 }
 
 tasks.named('test', Test).configure {
+    useJUnitPlatform()
+    dependsOn 'createMinecraftArtifacts'
+    systemProperty 'cannedmonster.test.minecraft',
+            file("build/moddev/artifacts/forge-${forge_minecraft_version}-${forge_version}-merged.jar").absolutePath
     finalizedBy tasks.named('jacocoTestReport')
 }
 

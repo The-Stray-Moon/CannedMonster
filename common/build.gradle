@@ -1,19 +1,14 @@
 // Standalone build for the shared source tree.
 //
-// common/ holds every piece of code that has no confirmed loader/version
-// difference. It MAY reference Minecraft and loader types: the split rule is
-// "a confirmed version difference", not "platform independence". It compiles
-// against the same legacyforge classpath as targets/forge-1.20.1, so it can be
-// built and tested on its own:
+// common/ holds the primary NeoForge 1.21.1 implementation. Files with a
+// confirmed 1.20.1 difference are excluded by that target's commonJava block
+// and replaced in targets/forge-1.20.1. This standalone build checks the
+// shared tree against the primary target's NeoForge classpath:
 //
 //     gradlew -p common build
-//
-// Targets compile the original files directly in their own source set.
-// Their commonJava blocks exclude files with confirmed version differences;
-// this standalone build is not imported by a target.
 plugins {
     id 'java-library'
-    id 'net.neoforged.moddev.legacyforge' version '2.0.91'
+    id 'net.neoforged.moddev' version '2.0.141'
 }
 
 def properties = new Properties()
@@ -25,11 +20,12 @@ group = mod_group_id
 version = mod_version
 
 java {
-    toolchain.languageVersion = JavaLanguageVersion.of(17)
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
 }
 
-legacyForge {
-    version = "${forge_minecraft_version}-${forge_version}"
+neoForge {
+    version = neoforge_version
+    addModdingDependenciesTo(sourceSets.test)
 }
 
 repositories {

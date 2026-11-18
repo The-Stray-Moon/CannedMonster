@@ -59,6 +59,8 @@
 
 `runClient` / `runServer` 的前置任务 `prepareAsmRun` 管理 run/mods 下的 `cannedmonster-asm-dev.jar` 与 `cannedmonster-packaged.jar`，根据 `-PverifyPackagedMod` 互斥安装；其他 mods 文件不自动清理。成品模式禁用源码模组，并从 `RunGameTask.classpathProvider` 排除开发输出。启动参数不需要 Java Agent。构建后检查外层服务注册、内层 metadata/资源以及两层无重复游戏包，再分别验证开发入口和成品入口；启动成功不能代替融合行为验证。
 
+Forge 1.20.1 使用 `net.neoforged.moddev.legacyforge`、JDK 17 toolchain 和 SRG 运行时。Mixin 由 MDG 的 `mixin` 扩展生成 refmap（必须有 `annotationProcessor`），ASM 服务通过 ModLauncher `ITransformationService` 接入；扫描与调度必须兼容 1.20.1 SRG 名称。发布/成品验证是两个文件：普通游戏 jar 和 `cannedmonster-bootstrap.jar`。单 jar 会被 ModLauncher 排除出普通模组发现，导致 Mixin 配置在早期不可读。`prepareAsmRun` 在开发运行只放 bootstrap jar，`-PverifyPackagedMod` 同时放游戏 jar 与 bootstrap jar。集成服客户端已验证；专用服务器、投掷/随机/战利品/派生/骑乘/传送等完整矩阵仍未完成。`common` 独立构建以 NeoForge 1.21.1 为主类路径，Forge 1.20.1 的差异由 target 排除和替换实现覆盖。
+
 启动索引必须跳过模块描述文件，按 manifest 和当前 JVM 解析 multi-release 类，未知父类或空父类不能导致扫描崩溃。方法体注入必须排除 abstract/native/无 Code 声明；native 内部行为不属于支持范围。调度句柄从公共基类契约取得，不能要求模组实体实现类为 public，也不能把玩家精确调用退回 ServerPlayer 虚调用。相关回归位于 `BootstrapTest`、`BodyTransformerTest`、`NativeCallHandlesTest` 与 `bootstrap/native-calls.js`。
 
 融合会话驻留身体的实例 session 槽：成员列表、属性原始值、OrderedCalls 调度与 FusionMotion 共用该状态；全局 HOSTS 仅供清理/配置刷新，UUID 归属表仅在组成变更时维护，不得为查重调用全体成员存档。启动推导后只保留独立类布局，不长期引用完整 ASM 方法树。
@@ -178,6 +180,8 @@ NeoForge 1.21.1 的 `src/test/resources/fusion/` 脚本在新建的 `Fusion attr
 | Fabric 26.1 | `targets/fabric-26.1` | JDK 25 | `./gradlew clean build` |
 | NeoForge 1.21.1 | `targets/neoforge-1.21.1` | JDK 21 | `./gradlew clean build` |
 | NeoForge 26.1 | `targets/neoforge-26.1` | JDK 25 | `./gradlew clean build` |
+
+Forge 1.20.1 与 NeoForge 1.21.1 是当前有融合实现的实验 target；其余 target 仍只做模板构建。构建通过不等于运行时行为已验证，实际范围见 [README](../README.md) 的验证记录。
 
 补充规则：
 

@@ -21,8 +21,8 @@ public final class ClientRiding {
         if (old == null || state.sequence() >= old.sequence()) STATES.put(state.bodyId(), state);
     }
 
-    public static void leave(net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent event) {
-        if (event.getLevel().isClientSide) STATES.remove(event.getEntity().getUUID());
+    public static void leave(net.minecraft.world.entity.Entity entity) {
+        if (entity.level().isClientSide) STATES.remove(entity.getUUID());
     }
 
     public static void tick() {

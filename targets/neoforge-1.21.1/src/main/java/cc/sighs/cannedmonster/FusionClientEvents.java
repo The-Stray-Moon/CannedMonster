@@ -24,7 +24,7 @@ public final class FusionClientEvents {
 
     @SubscribeEvent
     public static void leave(net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent event) {
-        ClientRiding.leave(event);
+        ClientRiding.leave(event.getEntity());
     }
 
     @SubscribeEvent

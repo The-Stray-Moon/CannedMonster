@@ -66,7 +66,7 @@ public final class SliceGeometry {
     private static List<float[]> plane(List<float[]> input, int axis, float boundary, boolean above) {
         if (input.isEmpty() || !Float.isFinite(boundary)) return input;
         List<float[]> output = new ArrayList<>();
-        float[] previous = input.getLast();
+        float[] previous = input.get(input.size() - 1);
         boolean previousInside = above ? previous[axis] >= boundary : previous[axis] <= boundary;
         for (float[] current : input) {
             boolean inside = above ? current[axis] >= boundary : current[axis] <= boundary;

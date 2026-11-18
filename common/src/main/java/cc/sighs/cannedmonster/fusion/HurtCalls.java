@@ -20,10 +20,18 @@ public final class HurtCalls {
             try {
                 MethodType signature = MethodType.methodType(boolean.class, DamageSource.class, float.class);
                 if (Player.class.isAssignableFrom(type)) {
-                    return MethodHandles.privateLookupIn(Player.class, MethodHandles.lookup())
-                            .findSpecial(Player.class, "hurt", signature, Player.class);
+                    MethodHandles.Lookup lookup = MethodHandles.privateLookupIn(Player.class, MethodHandles.lookup());
+                    try {
+                        return lookup.findSpecial(Player.class, "hurt", signature, Player.class);
+                    } catch (NoSuchMethodException missing) {
+                        return lookup.findSpecial(Player.class, "m_6469_", signature, Player.class);
+                    }
                 }
-                return MethodHandles.publicLookup().findVirtual(LivingEntity.class, "hurt", signature);
+                try {
+                    return MethodHandles.publicLookup().findVirtual(LivingEntity.class, "hurt", signature);
+                } catch (NoSuchMethodException missing) {
+                    return MethodHandles.publicLookup().findVirtual(LivingEntity.class, "m_6469_", signature);
+                }
             } catch (ReflectiveOperationException failure) {
                 throw new IllegalStateException("Cannot bind native hurt for " + type.getName(), failure);
             }

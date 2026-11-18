@@ -10,24 +10,24 @@
 
 - 主项目根目录为 `D:\work\CannedMonster`，不再嵌套 `cannedmonster/`。
 - 本地 Minecraft 1.21.1 参考源码位于根目录 `build/minecraft-1.21.1/`；不属于生产源码集，也不提交 Git。原 `source-study/` 已清理。
-- 运行单版本构建时在 `targets/neoforge-1.21.1/` 使用该 target 的 wrapper。该 target 的 `clean` 不删除根目录参考源码；手动清空根 `build/` 会删除参考源码，操作前需保留或准备重新生成。
+- 运行单版本构建时在 `targets/neoforge-1.21.1/` 或 `targets/forge-1.20.1/` 使用该 target 的 wrapper。这些 target 的 `clean` 不删除根目录参考源码；手动清空根 `build/` 会删除参考源码，操作前需保留或准备重新生成。
 
 ## 罐头实现规范
 
-- `common/.../can` 保存物品逻辑、内容 NBT、捕捉/释放和投掷实体。八种物品与实体的 NeoForge 注册、公共交互拦截和客户端渲染在 1.21.1 target；不要为特定生物另设捕捉/融合规则。
+- `common/.../can` 保存物品逻辑、内容 NBT、捕捉/释放和投掷实体。八种物品与实体的注册、公共交互拦截和客户端渲染在各 target；1.21.1 使用组件/NeoForge API，1.20.1 使用 NBT/Forge API 的 target 替换实现。不要为特定生物另设捕捉/融合规则。
 - 材质是用户原图按行优先切出的 8 个 16×16，最后一格空白不用。空间型只注册物品，未提供行为或配方；随机型无存储，击中方块生成成功才消耗。
 - 普通型不得整体捕捉已有融合体；空普通罐头手持右键或投掷型命中融合体时用 `FusionRuntime.peel` 逐次剥离最上层成员并装入罐头，剥离数据超出容量必须回滚为原融合。大型可整体保存；从玩家一次性取出时用 `FusionRuntime.packAll` 把最后一名成员作为释放身体、前面成员作为有序融合 Members，`AttributeOrigins` 只取成员原始快照，`FusionRuntime.stripAll` 再恢复玩家自身属性，失败不得丢失成员。满罐融合时用 `FusionRuntime.prepend` 展平并维持罐内→目标原成员→目标身体顺序，失败不得清空罐头。
 - 玩家融合操作由 `PlayerFusion` 适配，运行会话与持久化统一在 `FusionRuntime`：满的手持普通/大型罐头使用原生 32 tick 食用完成流程（`finishUsingItem`），完成前松键或切换物品取消，失败保留罐内内容；满的投掷型命中玩家时按序并入。空普通罐仅在独立按下→松开周期的 `releaseUsing` 中取出最前面成员，空大型罐同周期一次性取出全部成员，空投掷型命中玩家也可取出。有内容的物品名在括号中显示内容（普通罐为生物名，大型罐为数量），由原版选中物品名提示显示，不额外注册 HUD 层；数量与显示名读取罐头 NBT 的 `Count`，旧内容缺少时从融合 Members 推导。服务端记录手、物品实例和内容快照，消费使用记录后才提交；满罐松键不得融合。客户端食用完成后锁定本次按键，持续按住不得自动开始空罐取出；真正松开后下次按键才解除。不得恢复为任意松键清空满罐，也不得让一次按键同时完成食用和取出。玩家是唯一身体和控制者；玩家与 Mob 共用 `FusionRuntime` 会话和 `BodyLinks`，成员保持真实类型且不入世界，原生 tick/aiStep 在 super 边界续接。玩家公共执行通过 Player 实现的精确调用而不是再次虚调用 ServerPlayer.tick。Mob 专属字段不能强转到 Player；玩家共享同步字段仅限 Entity/LivingEntity 声明。成员自主运动、转向、骑乘、无重力写入与移除不得控制玩家。玩家融合成员的 getXRot/getYRot/getViewXRot/getViewYRot 读取玩家当前及插值朝向；Entity 与 LivingEntity 的 lookAt 整体取消，setYHeadRot/setYBodyRot 不得反写玩家，不能只拦截两个转角 setter 而留下原生 lookAt 后半段写入。当前仍不能描述成任意模组行为的完整合成。
 - 罐头交互在公共 PlayerInteractEvent.EntityInteract 中处理，以免悦灵等先拿走物品。投掷型返回 PASS 且取消生物交互以允许后续空气使用蓄力；不要重复触发玩家公共管线。
 - 玩家自身交互只在一次右键的方块、实体和物品阶段都没有消费动作时回退：`ServerPlayerGameMode.useItem` 返回 PASS 后，在该方法末尾按成员顺序调用成员原生 `mobInteract`，首个 `consumesAction` 的结果作为本次使用结果，并同步手持物变化和摆动。旁观者、物品冷却中、方块/实体已消费（客户端不会发送 use 包）或物品结果非 PASS 时不得回退，也不得把成员加入世界。融合铁傀儡持铁锭右键按原生规则消耗铁锭并回复共享血量。成员 `mobInteract` 触发的骑乘必须经过 `startRiding` 载具入口：身体不得把自己或同一身体的成员当作载具，其他骑手也不得骑乘玩家融合体；融合 Mob 身体仍允许外部骑手通过成员请求骑上该身体。驯服驴的 `doPlayerRide` 不得形成自骑，否则会在 `getIndirectPassengersStream`/`StartRidingTrigger` 递归栈溢出。
-- 内容在 DataComponents.CUSTOM_DATA 的 `cannedmonster:contents` 下，带版本、显示名称和完整实体 NBT。捕捉前校验 256KiB、深度和 UTF 长度，准备好内容后才移除源；无死亡掉落/分裂。释放被碰撞/生成事件阻止时保留数据；已加载重复 UUID 拒绝重放。
+- 内容键为 `cannedmonster:contents`：1.21.1 存在 DataComponents.CUSTOM_DATA，1.20.1 存在物品 NBT；两端都必须带版本、显示名称和完整实体 NBT。捕捉前校验 256KiB、深度和 UTF 长度，准备好内容后才移除源；无死亡掉落/分裂。释放被碰撞/生成事件阻止时保留数据；已加载重复 UUID 拒绝重放。
 - 空间、随机、铁制材料罐不得储存生物；功能罐头 max stack=1，投掷扣除也适用于创造模式。配方只使用铁制材料罐，不吃满功能罐。
 - 罐头测试位于 target `src/test/resources/cans/`，必须验证真实投掷物 tick/碰撞，不只直接调用 onHit；跨重启测试保存玩家物品栏中的融合大罐头并验证成员顺序。
 - 如果掉落物被生成事件拒绝，ThrownCan 必须保留动作后的物品/实体内容，停止移动并定期重试，ReturningCan 状态与物品一起保存。只有物品成功登记（或随机生成成功消耗）才移除投掷实体，防止多模组事件取消导致生物内容消失。
 
 ## 当前实现范围
 
-- 当前只开发 NeoForge 1.21.1；其他 target 是初始化后的模板，不代表已经移植融合功能。共享 MC 代码目前只在该 target 验证。
+- NeoForge 1.21.1 是主实验实现，Forge 1.20.1 与 NeoForge 26.1 是迁移实验 target；其余 target 仍是初始化后的模板，不代表已经移植融合功能。共享 MC 代码在 NeoForge 1.21.1、Forge 1.20.1 与 NeoForge 26.1 上验证，各版本差异必须通过该 target 的 `commonJava` 排除和 target 实现处理，不得用运行时版本分支伪装兼容。
 - 玩家融合重做进行中：FusionTraits 从真实成员查询呼吸、火焰免疫、伤害免疫和效果接受判定，不添加物种能力表或代用药水。HurtCalls 在原生 hurt 的 LivingEntity 边界续接，公共扣血/伤害事件一次；标准 setTarget、doHurtTarget、performRangedAttack 和 Brain.ATTACK_TARGET 读写限定玩家视线射线命中的生物（受方块阻挡，最远 64 格，按玩家 tick 缓存）；没有命中时清空目标。玩家融合成员在 `TargetingConditions.test` 中把该目标的实体类型视为可攻击，仅覆盖标准目标校验，不改写成员自身的 `canAttackType` 实现；依赖成员自身移动才能进入的原生攻击状态机（如旋风人的滑步开火）不保证被满足。成员原生传送采用方案 A：只在 `teleportTo`/`randomTeleport`/`Shulker.teleportSomewhere` 帧内放行位置写入，帧结束用玩家自身包围盒、区块和世界边界复核后通过 `ServerPlayer` 连接同步，失败回滚；同维度、每 20 tick 至多一次，骑乘、载客与跨维度成员传送拒绝，不能据此宣称任意模组私有记忆都已理解。融合飞行生物时 `FlightRules` 按 `FlyingMob`/`FlyingAnimal`/`FlyingMoveControl`/`FlyingPathNavigation`/`FLYING_SPEED` 结构判定并叠加 `config/cannedmonster-common.toml` 的额外名单，给玩家设置 `noGravity`，解除融合时清除（不保留融合前遗留值）；外观包携带飞行标志，客户端把前进/后退改为沿视线方向，自定义飞行仍需配置或后续行为探测。成员在自身生命周期/受伤帧内使用私有临时装备，禁止女巫等原生自用行为覆盖玩家主手；帧外公共装备视图仍指向玩家，玩家护甲公共结算一次。私有存档准备时暂时解绑并 finally 恢复，保存实际消耗后的私有状态，不能复制玩家装备。通过标准 AttributeInstance.setBaseValue 的外部写入记录为玩家新的个体基础值；融合均值写入与成员执行帧内写入不回写原始快照。玩家移动速度单独由 `PlayerSpeed` 处理：基础值不平均、不改写，标准地面成员按属性平方换算为玩家等效速度后参与等权平均，结果只作为一个 `cannedmonster:fusion_speed` 加性修正量；标准地面要求非 `WaterAnimal`、导航恰为 `GroundPathNavigation`、移动控制器恰为 `MoveControl` 且 `travel` 由 `LivingEntity` 直接实现。水生、飞行、自定义移动控制器按中性处理。旧存档若基础值等于旧平均值会迁移回玩家原始值。未知辅助/反射运动、完整 Goal/Brain 请求事务、任意自定义 hurt/die、绕过标准 setter 的属性写入仍不保证。
 - 成品客户端已实测：鱿鱼水下 400 tick 与移除后溺水对照、岩浆怪真实岩浆 80 tick 与移除后火伤、物种 aiStep 推进、公共伤害一次、玩家装备消耗不复制、真实 keyUse 按住松开两周期、死亡复活和安全平台跨维度迁移。最终重跑范围以 README 最新记录为准。独服双客户端、第三方生物和规模性能仍未完成；不得将旧休眠测试当作这些项目的证明。
 - `common` 的 `fusion` 包保存原生实例调度与身体绑定；不得添加按实体 ID 分支的特性配方。
@@ -36,6 +36,14 @@
 - 战利品描述状态按 Mob.getLootTable/getLootTableSeed 的直接字段读集合保留成员私有（不是物种白名单），确保自定义表及 seed 不串用。绕过上述入口的模组自定义死亡/世界直接生成副作用不保证被捕获；特殊回调复制共享物品而不清空的未知模组仍不具备通用事务去重。
 - NeoForge 1.21.1 的 `src/bootstrap` 使用 ModLauncher `ITransformationService` 接入 ASM，不再注册 NeoForge coremod。`BytecodeIndex` 在模组扫描完成后建立索引，纯 ASM `BodyTransformer` 保留字段重定向与生命周期续接；启动适配器不加载游戏类。发布单 jar 的外层是 SERVICE 层启动代码，`META-INF/cannedmonster/game.jar` 保存游戏类、metadata、Mixin 与资源，由 `FusionModLocator` 交给 NeoForge 发现并进入 GAME 层。不得将外层同时作为普通模组或运行类路径依赖加载。开发运行由 `prepareAsmRun` 在 run/mods 放入仅含启动服务的 jar，成品验证改放完整发布 jar，互斥清理这两个任务专用文件。
 - `runClient -PverifyPackagedMod` 禁用源码模组并从构建 jar 加载，使用 ModDev 的 `RunGameTask.classpathProvider` 排除开发输出。不能只修改 JavaExec.classpath，任务执行时会再次追加 provider，造成重复包与 Mixin 类不可见。该验证入口依赖当前固定的 ModDev 版本，升级插件需重新核对。
+- Forge 1.20.1 的 `src/bootstrap` 同样通过 ModLauncher `ITransformationService` 接入纯 ASM，但运行时是 SRG 名称。`BodyTransformer` 必须同时识别官方名与 1.20.1 SRG 名，`OrderedCalls`/`HurtCalls`/`FusionNavigation` 需要 SRG 后备；不能只按 1.21.1 名称编写。Mixin 使用 MDG legacyforge 的 `mixin` 扩展（`config` + `add`）生成 `cannedmonster.refmap.json`；annotationProcessor 必须存在，否则 `reobfJar` 找不到 refmap 映射。1.20.1 不能使用单 jar：含 `ITransformationService` 的 jar 会被排除出普通模组发现，导致 Mixin 早期读不到配置；发布/成品验证必须同时放置游戏 jar 与 `cannedmonster-bootstrap.jar`。开发运行由 `prepareAsmRun` 只放启动服务 jar，`-PverifyPackagedMod` 放游戏 jar + bootstrap jar 并禁用源码模组。
+- Forge 1.20.1 的 `commonJava` 排除文件是经 1.20.1 API 确证的差异（组件/NBT、工具提示、Forge 事件、属性 Holder/Modifier、SimpleChannel、VertexConsumer、SliceBuffers 等）；修改这些共享文件时必须同时更新 target 替换实现。`common` 独立构建现以 NeoForge 1.21.1 主 target 类路径运行共享测试；Forge 1.20.1 需单独 `clean build`。
+- NeoForge 26.1 的 `src/bootstrap` 不再使用 ModLauncher：FML 11 移除 `ITransformationService`，改为 `META-INF/services/net.neoforged.neoforgespi.transformation.ClassProcessor` 注册 `FusionClassProcessor`，由 `ClassProcessor.link` 提供的 `BytecodeProvider` 按需加载类布局并缓存，构造完成后丢弃方法指令，只保留字段/父类/接口。处理器声明 `runsBefore(ClassProcessorIds.MIXIN)`，在 Mixin 之前改写字段访问与生命周期边界。发布物是普通单 jar，不再有内嵌 `game.jar`、`FusionModLocator`、`prepareAsmRun` 或 `-PverifyPackagedMod` 的 classpath 排除逻辑；`[[mixins]] config` 必须保留在 target 的 `neoforge.mods.toml`，否则 Mixin 完全不加载（本 target 曾因此出现 AttributeMap 未实现的错误）。
+- NeoForge 26.1 的 `commonJava` 排除文件覆盖约三十个共享文件（Identifier、组件/Value IO、物品使用与工具提示、hurtServer/doHurtTarget(ServerLevel)、startRiding 三参数、shouldDropLoot/dropEquipment(ServerLevel)、Brain 记忆、WaterAnimal 包、属性 id、渲染管线等）。26.1 的属性 id 去掉了 `generic.`/`player.`/`horse.` 等前缀（例如 `minecraft:movement_speed`）；旧存档加载时按去前缀规则归一化，`PlayerSpeed.ATTRIBUTE` 必须使用新 id，否则玩家速度会被通用平均错误改写。修改这些共享文件时必须同步 target 替换实现。
+- NeoForge 26.1 的物品注册使用 `DeferredRegister.Items`（`registerItem`/`registerSimpleItem` 注入 `Item.Properties.setId`），普通 `DeferredRegister<Item>` 会在注册时抛 “Item id not set”。物品模型需要 target 资源中的 `assets/<ns>/items/<id>.json`；配方原料必须使用字符串形式（`"minecraft:redstone"`），对象形式在 26.1 无法解析，target 用同名配方覆盖 common 资源（资源重复时 target 优先）。
+- NeoForge 26.1 的实体渲染改为 `EntityRenderState` + `SubmitNodeCollector`：`EntityRenderDispatcher.extractEntity` 记录 state→entity（WeakHashMap），`submit` 拦截融合体并按 `SubmitNodeCollection.submitModel/submitModelPart/submitCustomGeometry` 的裁剪消费者输出高度切片；`EntityRenderer.render`、`MultiBufferSource` 代理和旧 `SliceBuffers` 不再存在，禁止按旧 API 恢复。守卫者光束随成员几何一起切片，不再有独立特效阶段；成员手持物品不做垂直裁剪。
+- NeoForge 26.1 已通过 `clean build`（29 项共享测试）与 AutoJS 验证：物品/实体注册、7 配方、命令融合、罐头捕获/释放（阻挡保留）、玩家融合（生命 15、速度 0.1 + `cannedmonster:fusion_speed` -0.03 = 0.07）、存档重启恢复、`hurtServer` 单次 2 点伤害、投掷物真实 tick/碰撞、融合体死亡掉落入口、客户端 153 个切片帧。专用服务器、骑乘/传送/限时网络、完整战利品/派生矩阵、第三方模组、规模性能与截图级视觉比对尚未验证。
+- Forge 1.20.1 已实测 52 种生物、103 组融合/剥离结构属性矩阵，10 个身体与三成员身体的真实 tick，剪刀/染料/挤奶/铁锭交互，玩家飞行/水下/火焰/铁傀儡/速度/三成员/伤害/存档，大型罐融合体往返、真实投掷碰撞、失败保留、容量和重复 UUID 拒绝、史莱姆分裂继承、死亡战利品、成员 AI 投射物/燃烧/视线目标及融合体 NBT 往返。专用服务器、随机生成、骑乘/传送/限时网络、完整旧矩阵和第三方模组仍未验证，不能扩大为完整兼容性。
 - ASM 入口迁移验证：78 项测试通过，成品与源码客户端均用 AutoJS 验证服务注册、共享字段、100 个真实身体 tick、成员顺序/绑定/不入世界；成品另验证挤奶、NBT、运动隔离及完整 JVM 重启恢复。脚本在 `src/test/resources/bootstrap/`，依赖原 motion 专用世界与已准备平台、存活且在附近的玩家；旧 `motion/native-regression.js` 挤奶前须切生存并在结束后恢复创造，避免测试怪物杀死玩家导致后续区块停止 tick。独服、完整旧矩阵和发布平台对内嵌 metadata 的识别未在本轮验证，具体结果见 README，不能扩大为全部旧功能已复跑。
 - 后置成员是唯一入世界的身体和唯一世界身份；前置成员保留真实类型和独立物种状态。自主运动由身体导航执行，前置成员只提出路径请求；骑乘控制资格与输入来自成员原生实现。客户端已接入按序的高度切片组合，不改变碰撞箱。当前尚不承诺完整伤害回调合成、世界身份映射、任意模组私有动画同步或任意重写 tick 的兼容性。
 - `common/.../fusion/visual` 保存显示实例、同步载荷与几何裁剪。追踪开始、组合变化及每 20 个身体 tick 发送完整 SynchedEntityData 快照（包含默认值），每 2 tick 独立比较字段并只发送变化值，未变化不发包、不消耗 dirty 标志；外观/成员事件协议版本为 3，不兼容旧客户端。客户端缺少完整基线时拒绝增量并等待补全；成员使用会话 UUID，身体同时校验网络 ID 与 UUID。显示实例不入世界、不绑定服务端调度；客户端每游戏 tick 执行成员 tick/aiStep 的物种段，在 Mob 公共边界截断，不运行公共 AI/移动。运动姿态与装备来自身体，物种 Pose 不被身体覆盖。完整快照仅向原生 assignValues 提交变化字段，防止重复重置动画。成员实体事件通过携带即时状态的 MemberEvent 发给跟踪者及玩家本人，调用原生客户端事件分派但替换接收实例；序号去重，成员移除时停止其声音并标记显示实例已移除。守卫者攻击时钟取原生 Goal，声音复用原生实例，光束走独立世界效果阶段、不受身体缩放与高度切片影响。原生 setTarget(null) 后要允许一次完整 Goal 检查结束攻击，再回填视线目标，避免满蓄力后重复结算。玩家融合也使用同一套切片，玩家是最后一段；不能把玩家切片扩展描述成成员 AI 已执行。
@@ -83,7 +91,7 @@
 - 不额外关联独立 common、根构建或其他完整 target；浏览根排除主 target、common/src、缓存及运行产物。common 内容修改应直接反映到目标索引，构建配置与排除规则修改后重新加载 Gradle。
 - 工作区 composite build 共用工作区 Gradle/JVM，不使用被包含目标的 wrapper；切换前检查兼容性，非主版本用独立 wrapper 验证。
 - 根和 CI 自动扫描 targets，禁止维护固定版本名单。`ci.enabled` 是验证配置，不是兼容性证据。新增目标遵循 [自动发现指南](docs/CI_TARGET_DISCOVERY.md)。
-- 标准验证：target 目录执行 `clean build`；共享层可执行根 `./gradlew -p common build`，但单独 common 成功不代表目标矩阵通过。产物需检查 metadata、共享类、资源及版本范围。
+- 标准验证：target 目录执行 `clean build`；共享层可执行根 `./gradlew -p common build`（以 NeoForge 1.21.1 主类路径编译并运行共享测试），但单独 common 成功不代表目标矩阵通过。产物需检查 metadata、共享类、资源及版本范围；Forge 1.20.1 还需检查 refmap、`MixinConfigs` 和两个发布文件。
 
 ## 必须使用 AutoJS 热调试
 

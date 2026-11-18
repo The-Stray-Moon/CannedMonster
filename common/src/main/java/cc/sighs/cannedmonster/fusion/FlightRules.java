@@ -25,9 +25,9 @@ import java.util.Set;
  */
 public final class FlightRules {
     public static final Set<ResourceLocation> DEFAULT_EXTRA = Set.of(
-            ResourceLocation.parse("minecraft:vex"),
-            ResourceLocation.parse("minecraft:bat"),
-            ResourceLocation.parse("minecraft:ender_dragon"));
+            ResourceLocation.tryParse("minecraft:vex"),
+            ResourceLocation.tryParse("minecraft:bat"),
+            ResourceLocation.tryParse("minecraft:ender_dragon"));
     private static volatile Set<ResourceLocation> extra = DEFAULT_EXTRA;
     private static final Set<Player> APPLIED = Collections.synchronizedSet(
             Collections.newSetFromMap(new IdentityHashMap<>()));

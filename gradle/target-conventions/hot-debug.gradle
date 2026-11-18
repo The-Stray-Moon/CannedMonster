@@ -62,18 +62,14 @@ def debugRuntime = configurations.create('hotDebugRuntime') {
     canBeResolved = true
     canBeConsumed = false
 }
-def dependencyConfiguration = debugRuntime.name
-if (plugins.hasPlugin('net.neoforged.moddev.legacyforge')) {
-    dependencyConfiguration = obfuscation.createRemappingConfiguration(debugRuntime).name
-    legacyForge.runs.configureEach {
-        additionalRuntimeClasspathConfiguration.extendsFrom(debugRuntime)
-    }
-} else if (plugins.hasPlugin('net.neoforged.moddev')) {
+def legacyForge = plugins.hasPlugin('net.neoforged.moddev.legacyforge')
+def dependencyConfiguration = legacyForge ? 'modRuntimeOnly' : debugRuntime.name
+if (plugins.hasPlugin('net.neoforged.moddev')) {
     configurations.named('runtimeClasspath').configure { extendsFrom(debugRuntime) }
-} else if (configurations.findByName('modLocalRuntime') != null) {
+} else if (!legacyForge && configurations.findByName('modLocalRuntime') != null) {
     dependencyConfiguration = 'modLocalRuntime'
     debugRuntime.extendsFrom(configurations.getByName(dependencyConfiguration))
-} else {
+} else if (!legacyForge) {
     configurations.named('runtimeClasspath').configure { extendsFrom(debugRuntime) }
 }
 
@@ -85,9 +81,11 @@ if (kubejs != null && !kubejs.trim().isEmpty()) {
 coordinates.addAll(providers.gradleProperty('debug_support_mods').getOrElse('').split(',').collect { it.trim() }.findAll { it })
 coordinates.each { coordinate ->
     dependencies.add(dependencyConfiguration, coordinate)
+    if (legacyForge) dependencies.add(debugRuntime.name, coordinate)
 }
 providers.gradleProperty('debug_libraries').getOrElse('').split(',').collect { it.trim() }.findAll { it }.each { coordinate ->
     dependencies.add(debugRuntime.name, coordinate)
+    if (legacyForge) dependencies.add(dependencyConfiguration, coordinate)
 }
 
 tasks.register('verifyHotDebug') {

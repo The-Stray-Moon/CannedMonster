@@ -79,7 +79,7 @@ public final class FusionRuntime {
         identities.add(host.getUUID());
         unique.add(host);
         for (Mob facet : facets) {
-            if (!unique.add(facet) || facet.level() != host.level() || facet.isAddedToLevel()
+            if (!unique.add(facet) || facet.level() != host.level() || registered(facet)
                     || facet.isRemoved() || BodyLinks.isFacet(facet) || session(facet) != null) {
                 throw new IllegalArgumentException("Members must be distinct unregistered mobs in the body's level");
             }
@@ -136,7 +136,7 @@ public final class FusionRuntime {
         FusionSession session = session(body);
         if (session == null) return;
         List<Map<ResourceLocation, Double>> updated = new ArrayList<>(session.origins);
-        Map<ResourceLocation, Double> own = new HashMap<>(session.origins.getLast());
+        Map<ResourceLocation, Double> own = new HashMap<>(session.origins.get(session.origins.size() - 1));
         own.put(attribute, value);
         updated.set(updated.size() - 1, Map.copyOf(own));
         session.origins = List.copyOf(updated);
@@ -144,7 +144,7 @@ public final class FusionRuntime {
     }
 
     public static void prepend(LivingEntity host, Mob incoming) {
-        if (host == incoming || host.level() != incoming.level() || incoming.isAddedToLevel()
+        if (host == incoming || host.level() != incoming.level() || registered(incoming)
                 || BodyLinks.isFacet(host) || BodyLinks.isFacet(incoming) || !host.isAlive() || !incoming.isAlive()) {
             throw new IllegalArgumentException("Fusion requires a live body and an independent incoming mob");
         }
@@ -191,12 +191,12 @@ public final class FusionRuntime {
         List<Mob> previous = List.copyOf(facets(host));
         if (previous.isEmpty()) throw new IllegalArgumentException("Fusion body has no members");
         var previousOrigins = originsOf(host);
-        Mob peeled = previous.getFirst();
+        Mob peeled = previous.get(0);
         List<Mob> remaining = List.copyOf(previous.subList(1, previous.size()));
         var remainingOrigins = List.copyOf(previousOrigins.subList(1, previousOrigins.size()));
         detach(host);
         try {
-            if (remaining.isEmpty()) AttributeAverages.apply(host, List.of(previousOrigins.getLast()),
+            if (remaining.isEmpty()) AttributeAverages.apply(host, List.of(previousOrigins.get(previousOrigins.size() - 1)),
                     host instanceof Player ? Set.of(PlayerSpeed.ATTRIBUTE) : Set.of());
             else attach(host, remaining, remainingOrigins);
             return peeled;
@@ -278,6 +278,11 @@ public final class FusionRuntime {
         }
     }
 
+    private static boolean registered(Entity entity) {
+        return entity.level() instanceof net.minecraft.server.level.ServerLevel server
+                && server.getEntity(entity.getUUID()) != null;
+    }
+
     private static CompoundTag saveMember(Mob member) {
         CompoundTag tag = member.saveWithoutId(new CompoundTag());
         tag.putString("id", BuiltInRegistries.ENTITY_TYPE.getKey(member.getType()).toString());
@@ -288,8 +293,8 @@ public final class FusionRuntime {
         List<Mob> members = facets(player);
         if (members.isEmpty()) throw new IllegalArgumentException("No fusion members to pack");
         var origins = originsOf(player);
-        if (members.size() == 1) return independentSave(members.getFirst());
-        CompoundTag body = independentSave(members.getLast());
+        if (members.size() == 1) return independentSave(members.get(0));
+        CompoundTag body = independentSave(members.get(members.size() - 1));
         CompoundTag fusion = new CompoundTag();
         fusion.putInt("Version", 2);
         fusion.put("AttributeOrigins", AttributeAverages.save(origins.subList(0, members.size())));
@@ -314,7 +319,7 @@ public final class FusionRuntime {
         if (facets(player).isEmpty()) return;
         detach(player);
         try {
-            AttributeAverages.apply(player, List.of(origins.getLast()), Set.of(PlayerSpeed.ATTRIBUTE));
+            AttributeAverages.apply(player, List.of(origins.get(origins.size() - 1)), Set.of(PlayerSpeed.ATTRIBUTE));
         } catch (RuntimeException failure) {
             com.mojang.logging.LogUtils.getLogger().error("Cannot restore player attributes after extracting all members", failure);
         }
@@ -331,9 +336,10 @@ public final class FusionRuntime {
             List<Mob> restored = new ArrayList<>();
             for (int i = 0; i < members.size(); i++) {
                 CompoundTag member = members.getCompound(i);
-                ResourceLocation id = ResourceLocation.parse(member.getString("id"));
-                EntityType<?> type = BuiltInRegistries.ENTITY_TYPE.getOptional(id)
-                        .orElseThrow(() -> new IllegalArgumentException("Missing fusion entity type: " + id));
+                String rawId = member.getString("id");
+                ResourceLocation id = ResourceLocation.tryParse(rawId);
+                EntityType<?> type = id == null ? null : BuiltInRegistries.ENTITY_TYPE.getOptional(id).orElse(null);
+                if (type == null) throw new IllegalArgumentException("Missing fusion entity type: " + rawId);
                 Entity created = type.create(host.level());
                 if (!(created instanceof Mob facet)) throw new IllegalArgumentException("Fusion member is not a Mob: " + id);
                 if (member.contains(SAVE_KEY)) throw new IllegalArgumentException("Nested fusion members must be flattened");

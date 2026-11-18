@@ -14,6 +14,15 @@ import java.util.Set;
 public final class FusionNavigation {
     private static final Set<String> REQUESTS = Set.of("createPath", "moveTo", "stop", "tick", "getPath", "isDone",
             "isInProgress", "isStuck", "recomputePath", "setSpeedModifier", "getTargetPos", "shouldRecomputePath", "getMaxDistanceToWaypoint");
+    private static final Map<String, String> SRG = Map.ofEntries(
+            Map.entry("m_26524_", "createPath"), Map.entry("m_26556_", "createPath"), Map.entry("m_26548_", "createPath"),
+            Map.entry("m_7864_", "createPath"), Map.entry("m_148218_", "createPath"), Map.entry("m_6570_", "createPath"),
+            Map.entry("m_26519_", "moveTo"), Map.entry("m_5624_", "moveTo"), Map.entry("m_26536_", "moveTo"),
+            Map.entry("m_26573_", "stop"), Map.entry("m_26566_", "tick"), Map.entry("m_26570_", "getPath"),
+            Map.entry("m_26571_", "isDone"), Map.entry("m_26572_", "isInProgress"), Map.entry("m_26577_", "isStuck"),
+            Map.entry("m_26517_", "recomputePath"), Map.entry("m_26529_", "setSpeedModifier"),
+            Map.entry("m_26567_", "getTargetPos"), Map.entry("m_200903_", "shouldRecomputePath"),
+            Map.entry("m_148228_", "getMaxDistanceToWaypoint"));
     private record Call(MethodHandle handle, Class<?> result) {}
     public record Result(Object value) {}
     private static final Result EMPTY = new Result(null);
@@ -28,7 +37,7 @@ public final class FusionNavigation {
         try {
             var lookup = MethodHandles.privateLookupIn(PathNavigation.class, MethodHandles.lookup());
             for (var method : PathNavigation.class.getDeclaredMethods()) {
-                if (!REQUESTS.contains(method.getName()) || Modifier.isPrivate(method.getModifiers()) || Modifier.isStatic(method.getModifiers())) continue;
+                if (!REQUESTS.contains(canonical(method.getName())) || Modifier.isPrivate(method.getModifiers()) || Modifier.isStatic(method.getModifiers())) continue;
                 MethodType signature = MethodType.methodType(method.getReturnType(), method.getParameterTypes());
                 MethodHandle handle = lookup.findVirtual(PathNavigation.class, method.getName(), signature)
                         .asSpreader(Object[].class, signature.parameterCount())
@@ -41,6 +50,10 @@ public final class FusionNavigation {
         return Map.copyOf(calls);
     }
 
+    private static String canonical(String name) {
+        return SRG.getOrDefault(name, name);
+    }
+
     public static boolean redirects(Mob member) {
         return BodyLinks.isFacet(member) && FusionMotion.of(member) != null;
     }
@@ -50,13 +63,14 @@ public final class FusionNavigation {
         if (motion == null || !BodyLinks.isFacet(member)) return null;
         Call call = CALLS.get(signature);
         if (call == null) throw new IllegalArgumentException("Unknown navigation request " + signature);
-        String name = signature.substring(0, signature.indexOf('('));
+        String name = canonical(signature.substring(0, signature.indexOf('(')));
         if (name.equals("tick")) return EMPTY;
         if (name.equals("stop")) {
             motion.stop(member);
             return EMPTY;
         }
-        if (name.equals("moveTo") && arguments.length == 2 && signature.startsWith("moveTo(Lnet/minecraft/world/level/pathfinder/Path;")) {
+        if (name.equals("moveTo") && arguments.length == 2
+                && (arguments[0] == null || arguments[0] instanceof net.minecraft.world.level.pathfinder.Path)) {
             if (arguments[0] == null) { motion.stop(member); return NO; }
         }
         boolean request = name.equals("createPath") || name.equals("moveTo");

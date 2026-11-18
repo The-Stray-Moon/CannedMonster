@@ -11,8 +11,8 @@ Ordered native entity fusion
 
 主项目已直接放在 `D:\work\CannedMonster`，不再有外层 `cannedmonster/` 子目录。Git 仓库和未提交修改一并保留。
 
-- Minecraft 1.21.1 参考源码：`build/minecraft-1.21.1/`，仅供阅读，不参与模组编译，不提交 Git。
-- NeoForge 1.21.1 工程：`targets/neoforge-1.21.1/`。
+- Minecraft 1.21.1 参考源码：`build/minecraft-1.21.1/`；Minecraft 26.1 / NeoForge 26.1 参考源码：`build/minecraft-26.1/`、`build/neoforge-26.1-sources/`。均仅供阅读，不参与模组编译，不提交 Git。
+- NeoForge 1.21.1 工程：`targets/neoforge-1.21.1/`；Forge 1.20.1 迁移工程：`targets/forge-1.20.1/`。
 - IDE：单版本打开上述 target，或打开 `idea-workspace/` 使用全版本浏览模式；旧路径打开的 IDEA 工程需要重新打开新路径并刷新 Gradle。
 
 原 `source-study/` 中的其他参考仓库、旧模板和缓存已删除。参考源码位于构建目录，手动清空根 `build/` 时也会删除；在 target 目录执行 `clean build` 不影响这份根目录参考源码。
@@ -130,9 +130,51 @@ Ordered native entity fusion
 
 成品 jar 经 AutoJS 1.0.1 / KubeJS 2101.7.2-build.379 集成服 server side 执行 `src/test/resources/cans/breeze-rotation-regression.js`：同一旋风人成员仰头融合后，前、右上、后、左上四方向各生成一个真实 `BREEZE_WIND_CHARGE`，20 项检查通过，覆盖当前/插值视线一致、原生朝向判定、成员瞄准不改玩家视角。另验证剥离后成员和普通牛可正常抬头，玩家视角不变。测试位置、原有融合与 441 个临时平台方块已恢复，保存成功。独服与第三方朝向重写未在本轮验证。
 
+## Forge 1.20.1 迁移状态
+
+`targets/forge-1.20.1/` 已从模板迁移为可构建、可运行的实验 target。与 NeoForge 1.21.1 的已确证差异通过 target 的 `commonJava` 排除和 target 源码替换处理：组件/NBT、物品工具提示与使用时长、Forge 玩家事件、属性 `Holder`/`AttributeModifier`、网络 `SimpleChannel`、1.20.1 `VertexConsumer`、属性平均与玩家速度、追踪/外观同步等。共享层补充了 Java 17 兼容（`List.getFirst/getLast`、`ResourceLocation.tryParse`）及 1.20.1 SRG 名称后备。
+
+构建与打包：
+
+- `./gradlew clean build` 通过，30 项测试零失败；新增 `BodyTransformer120Test` 对 1.20.1 合并 jar 做真实类索引与 `Entity`、`SynchedEntityData`、`Mob`、`PathNavigation` 变换检查。
+- Mixin 使用 MDG legacyforge 的 `mixin` 扩展生成 `cannedmonster.refmap.json`，并写入 manifest `MixinConfigs`；`reobfJar` 同时重映射 refmap。
+- 单 jar 方案不可用：ModLauncher 会把含 `ITransformationService` 的 jar 排除出普通模组发现，Mixin 在早期读不到配置。1.20.1 改为两个文件：`build/libs/CannedMonster-forge-1.20.1-<version>.jar`（普通游戏模组）和 `build/bootstrap/cannedmonster-bootstrap-dev.jar` 重命名为 `cannedmonster-bootstrap.jar` 的启动服务/ASM jar。二者都必须放入 `mods/`。开发运行只放启动服务 jar；`runClient -PverifyPackagedMod` 自动准备这两个文件。
+- 已用 AutoJS 1.0.1 / KubeJS 2101.7.2，在源码 `runClient` 和 `runClient -PverifyPackagedMod`（集成服）验证：`Entity`/`SynchedEntityData` 注入 `BoundObject`；牛+羊融合最大生命 9、成员不入世界、位置共享；三成员 7→剥离 6.5→10；generic 2 点伤害只扣 2；真实 `Player.interactOn` 空罐捕捉返回 `CONSUME`；玩家满罐融合/空罐取出最大生命 20↔15；7 个配方加载；客户端收到 1 个外观成员并提交 `[504,200]` 顶点；`ClientRiding.fusion` 为 true。
+- 扩展生物矩阵：52 种生物分别作为身体（配牛成员）和作为牛身体成员，共 103 组“融合→共享血量→剥离”全部通过；逐组校验成员顺序/类型、成员未入世界、位置共享、最大生命/移动速度/护甲基础值均值、共享当前血量，以及剥离后身体属性、成员绑定和未入世界状态恢复。
+- 真实 tick：10 个不同物种身体（牛、羊、猪、鸡、村民、铁傀儡、雪傀儡、悦灵、青蛙、海龟）各带成员与一个牛+羊+兔三成员身体同时推进 463 tick；槽位、最大生命、位置和成员未入世界保持，剥离后恢复。
+- 交互：羊成员/羊身体均可被真实玩家剪刀剪毛，羊成员可被染料染色；牛身体+羊成员可用桶挤奶；铁傀儡身体/牛成员在低血量时被铁锭右键回复 25（10→35）并消耗铁锭。
+- 玩家融合：蝙蝠使玩家 `noGravity`、鱿鱼使 `canBreatheUnderwater`、烈焰人使 `fireImmune`，剥离后均恢复；铁傀儡使最大生命 20→60；牛使移动速度 0.1→0.07→0.1；三成员融合顺序为 rabbit,sheep,cow、最大生命 10.25，依次取出 12.6667→15→20；玩家存档 NBT 保存/解绑/加载恢复成员与生命；generic 2 点伤害 15→13，剥离后最大生命恢复 20（当前血不自动回满）。
+- 罐头：满大型罐捕捉融合体（Count=2）→玩家融合（成员顺序 sheep,cow，生命 12.6667）→空大型罐一次性取出 Count=2 →释放得到羊为身体、牛为成员的融合体（生命 9）→剥离恢复 10；真实投掷物 tick/碰撞捕获牛，投掷物移除并掉落名称 `Cow` 的投掷罐；阻挡位置释放失败且罐头保留内容，开阔位置释放成功；70k 字符 NBT 超限拒绝且生物不被移除；重复 UUID 拒绝重放、移除重复体后可恢复。
+- 成员 AI/死亡：雪傀儡成员真实向僵尸投掷雪球，投射物 owner 为融合身体；僵尸成员白天燃烧使共享血量 15→8；史莱姆身体死亡分裂出 2 个尺寸 2 子体，每个子体保留 1 个牛成员且最大生命 7；牛+羊死亡同时产生牛肉、皮革、羊肉和羊毛。客户端视线指向牛后，玩家融合的僵尸成员原生目标变为该牛；融合体 NBT 保存/重载恢复成员、AttributeOrigins 与顺序。
+- 未验证：专用服务器（EULA 未接受）、随机生成、骑乘/传送/限时网络、完整旧战利品/派生矩阵、第三方模组和规模性能；苦力怕成员在本次短时观察中未进入膨胀状态，不能据此判定其 Goal 已通过。上述结果不能扩大为完整 Forge 1.20.1 兼容性验收。
+
+## NeoForge 26.1 迁移状态
+
+`targets/neoforge-26.1/` 已从模板迁移为可构建、可启动的实验 target。NeoForge 26.1 移除了 ModLauncher，FML 11 改用 `net.neoforged.neoforgespi.transformation.ClassProcessor`；本 target 因此不再使用 1.21.1 的内嵌游戏 jar + `ITransformationService` 方案，而是普通单 jar：`META-INF/services/net.neoforged.neoforgespi.transformation.ClassProcessor` 声明 `cc.sighs.cannedmonster.bootstrap.FusionClassProcessor`，由它把本模组的 `BodyTransformer`（字段重定向、`BoundObject` 槽、生命周期续接、`hurtServer`/`convertTo`/导航钩子）注册到全局类处理器链，并声明在 Mixin 之前运行。
+
+与 1.21.1 的已确证差异通过 target 的 `commonJava` 排除和 target 源码替换处理：`ResourceLocation`→`Identifier`、`UseAnim`→`ItemUseAnimation`、`MobSpawnType`→`EntitySpawnReason`、`InteractionResultHolder` 移除、`ThrowableItemProjectile` 包移动、`CompoundTag` 的 Optional/Value IO、`Entity.saveWithoutId(ValueOutput)`/`load(ValueInput)`、`hurt` 变 final 后的 `hurtServer(ServerLevel, DamageSource, float)`、`doHurtTarget(ServerLevel, Entity)`、三参数 `startRiding`、`Level.isClientSide()`/`getRandom()`、`shouldDropLoot(ServerLevel)`/`dropEquipment(ServerLevel)`、`isControlledByLocalInstance`→`isLocalInstanceAuthoritative`、`Brain` 记忆重载、`WaterAnimal` 包移动、属性 id 去前缀（`minecraft:movement_speed` 等）、实体渲染改为 `EntityRenderState` + `SubmitNodeCollector` 管线、物品模型需要 `assets/<ns>/items/<id>.json`、配方原料需要字符串形式。旧存档中的 `generic.*` 属性 id 在加载时按去前缀规则归一化。
+
+构建与启动：
+
+- `./gradlew clean build` 通过，29 项共享测试零失败。
+- 开发客户端 `runClient` 启动到主菜单并进入升级后的测试世界；客户端 ASM 统计显示 `cannedmonster:fusion` 已注册（该统计按“被处理器选中”的类计数，不是实际改写数；独立探针显示约 184/6596 个类被实际改写）。
+- 旧 1.21.1 世界可直接升级打开；升级界面需要手动/脚本点击“I know what I'm doing!”和“Yes”。
+
+已用 AutoJS 1.0.1 / KubeJS 26.1.2-8.0.6 在开发客户端 + 集成服务端验证：
+
+- 8 个罐头物品与 `cannedmonster:thrown_can` 实体类型均注册；7 个配方经 RecipeManager 按 id 命中（26.1 的字符串原料形式，配方文件放在 target 覆盖 common）。
+- `/fusion spawn minecraft:cow minecraft:pig` 生成猪身体 + 牛成员：成员 `BodyLinks.body` 指向猪、`isAddedToLevel=false`、与身体同 Level、共享血量 10/10，`FusionSession` 绑定在实体槽位中。
+- 空怪物罐头捕获牛：源实体移除、内容 `valid=true`、名称 `Cow`、Count=1；在玩家位置释放成功并清空，在阻挡位置释放失败且保留内容（符合设计）。
+- 玩家融合牛：罐内容清空、成员数 1、最大生命 20→15、移动速度基础值保持 0.1，新增 `cannedmonster:fusion_speed` 修正 -0.03，有效值 0.07；完整退出并重启客户端后，玩家融合仍从存档恢复（成员、生命、修正）。
+- 生存模式 `hurtServer` 2 点伤害只扣 2 点（15→13），没有按成员重复结算。
+- 客户端收到 3 个融合体的外观视图（猪+牛、牛+成员、玩家+牛）；把猪融合体移到视野内后 `FusionRenderer` 在约 5 秒内提交 153 个切片帧，未出现渲染崩溃。真实投掷物 tick/碰撞可把牛装入投掷罐并在地面释放。
+- 融合体死亡调用 `kill` 后公共死亡掉落流程无异常（未做掉落物数量矩阵）。
+
+未验证 / 已知限制：专用服务器、骑乘/传送/限时网络、完整战利品与派生矩阵、第三方模组、规模性能；切片渲染只覆盖模型/模型部件/自定义几何，成员手持物品不做垂直裁剪，守卫者光束不再有独立的身体尺度特效通道，而是随成员几何一起切片；未做截图级视觉比对。以上结果不能扩大为完整 26.1 兼容性验收。
+
 ## 项目状态
 
-当前是 **NeoForge 1.21.1 实验原型**，不是完成了任意模组兼容性的正式版本。只有该 target 接入融合运行时；其他 target 保留模板，不能作为可用移植版本发布。
+当前是 **NeoForge 1.21.1 主实验实现 + Forge 1.20.1 / NeoForge 26.1 迁移实验 target**，不是完成了任意模组兼容性的正式版本。其余 target 保留模板，不能作为可用移植版本发布。
 
 管理员命令：
 
@@ -256,7 +298,7 @@ NeoForge 21.1.234 / JDK 21，从 `runClient -PverifyPackagedMod` 加载成品 ja
 - `bootstrap/appearance-codec.js` 使用游戏原生注册表与真实 serializer 编解码，羊的 18 字段完整样本为 119 字节，单个羊毛字段差分为 64 字节，原版 dirty 保持 true；这是单样本载荷比较，不代表全场景带宽提升比例。`appearance-order.js` 验证增量应用、旧完整快照不回滚新状态、旧增量不复活已清理组成。JUnit 不启动完整 NeoForge，纯差分测试使用 serializer 契约；原版注册表路径由成品实测覆盖。
 - `saveEverything(false,true,true)` 返回 true，正常退出 JVM 后再次启动，同一 UUID `3c294d41-8d66-4fa0-bd99-e73a947563ee` 的牛身体恢复羊成员、蓝色与剪毛状态，服务端绑定及客户端完整快照通过；最终 server/client 脚本日志均 0 错误/警告，测试实体清理并保存，测试 JVM 退出。一次较早验证进程因任务超时退出，最终持久化结论来自之后的正常保存/退出/重启。
 
-运行脚本位于 target `src/test/resources/bootstrap/`：先运行 `optimized-session.js`，客户端获取该测试体及显示成员作为 `optView`/`optDisplay`，再运行 server `appearance-codec.js` 和 client `appearance-order.js`；需在原 motion 平台附近，测试身体设无敌防止旧测试怪物杀死。测试脚本不属于生产物种规则。未重跑独服双客户端、第三方生物、完整旧矩阵、长时间探索和大规模性能；没有宣称具体启动内存/帧率提升百分比。其他 target 仍为未移植模板。
+运行脚本位于 target `src/test/resources/bootstrap/`：先运行 `optimized-session.js`，客户端获取该测试体及显示成员作为 `optView`/`optDisplay`，再运行 server `appearance-codec.js` 和 client `appearance-order.js`；需在原 motion 平台附近，测试身体设无敌防止旧测试怪物杀死。测试脚本不属于生产物种规则。未重跑独服双客户端、第三方生物、完整旧矩阵、长时间探索和大规模性能；没有宣称具体启动内存/帧率提升百分比。其他 target（除已迁移的 Forge 1.20.1）仍为未移植模板。
 
 ### ASM 边界与原生调用句柄修复（2026-11-16）
 
@@ -264,7 +306,7 @@ NeoForge 21.1.234 / JDK 21，从 `runClient -PverifyPackagedMod` 加载成品 ja
 - 方法体变换统一跳过 abstract、native 与空指令声明，不再给 native tick/aiStep 或导航、伤害、移除入口写入非法 Code。native 内部行为仍不在 ASM 覆盖范围内。
 - OrderedCalls 从继承链的公共方法声明取得虚调用句柄，HurtCalls 从 LivingEntity 公共契约取得虚调用句柄，非 public 实体实现类仍执行真实覆写；Player 的 findSpecial 精确调用保持不变。新增生成类测试实际调用非 public 成员 tick/aiStep/hurt，并检查玩家子类不会改成 ServerPlayer 式再次虚分派。
 - NeoForge 1.21.1 / JDK 21 执行 `clean build verifyHotDebug`：84 项测试通过，0 失败/错误/跳过。成品 `runClient -PverifyPackagedMod` 在专用 `Fusion motion verification` 世界，用 AutoJS 1.0.1 / KubeJS / Rhino 验证 `bootstrap/asm-smoke.js`、`assert-asm.js` 和 `native-calls.js`：身体恰好推进 100 个真实 tick，成员顺序、共享字段、绑定和不入世界通过；玩家前置鱿鱼原生 aiStep 推进，generic 2 点伤害恰好扣 2 点血。最终调用 ok=true、无 isError，server 日志 0 错误/警告。玩家原有成员通过 prepend/peel 保留，测试后恢复模式、血量和自然回血规则。
-- 非 public 实现类由字节码生成测试覆盖，本轮未安装第三方生物模组；未重跑其他 target、独服、完整旧矩阵或性能测试。当前融合实现仅 NeoForge 1.21.1 已支持，其他 target 仍为模板。
+- 非 public 实现类由字节码生成测试覆盖，本轮未安装第三方生物模组；未重跑其他 target、独服、完整旧矩阵或性能测试。当前融合实现已在 NeoForge 1.21.1 验证，Forge 1.20.1 为迁移实验 target；其他 target 仍为模板。
 
 ### ASM 启动入口迁移验证（2026-11-16）
 
@@ -333,7 +375,7 @@ NeoForge 21.1.234 / Minecraft 1.21.1 / JDK 21；开发客户端加载 AutoJS 1.0
 | fabric-26.1 | JDK 25 | true | Pending verification |
 | forge-1.18.2 | JDK 21 | true | Pending verification |
 | forge-1.19.2 | JDK 21 | true | Pending verification |
-| forge-1.20.1 | JDK 21 | true | Pending verification |
+| forge-1.20.1 | JDK 21 | true | Experimental: build/tests + dev/packaged integrated client verified; dedicated server and full scenarios pending |
 | neoforge-1.21.1 | JDK 21 | true | Experimental: build/tests + packaged client scenarios verified; dedicated server pending |
 | neoforge-26.1 | JDK 25 | true | Pending verification |
 
@@ -353,11 +395,11 @@ NeoForge 21.1.234 / Minecraft 1.21.1 / JDK 21；开发客户端加载 AutoJS 1.0
 .\gradlew.bat clean build
 .\gradlew.bat verifyHotDebug
 .\gradlew.bat runClient
-.\gradlew.bat runClient -PverifyPackagedMod # 仅 NeoForge 1.21.1：从构建 jar 而非开发类目录加载
+.\gradlew.bat runClient -PverifyPackagedMod # NeoForge 1.21.1 / Forge 1.20.1：从构建 jar 加载；Forge 同时准备 bootstrap jar
 # 或 runServer；Minecraft EULA 必须由用户阅读并接受
 ```
 
-在仓库根可执行 `./gradlew -p common build` 单独检查共享层，但不能替代目标矩阵验证。根 `-Ptarget=<目录名> build` 调用该 target 的独立 wrapper；`-PallTargets=true build` 自动选择已启用且 `ci.java` 不高于当前 Gradle JVM 的目标，并打印跳过项。最低 JDK 筛选不保证旧 wrapper 支持任意新版 JDK，必要时分别构建。根 `build` 默认只验证 common。
+在仓库根可执行 `./gradlew -p common build` 单独检查共享层。该独立构建以 NeoForge 1.21.1 主 target 的类路径编译并运行共享测试；1.20.1 差异由 `targets/forge-1.20.1` 的源码替换覆盖，不能替代目标矩阵验证。根 `-Ptarget=<目录名> build` 调用该 target 的独立 wrapper；`-PallTargets=true build` 自动选择已启用且 `ci.java` 不高于当前 Gradle JVM 的目标，并打印跳过项。最低 JDK 筛选不保证旧 wrapper 支持任意新版 JDK，必要时分别构建。根 `build` 默认只验证 common。
 
 ## AutoJS 热调试与热执行
 

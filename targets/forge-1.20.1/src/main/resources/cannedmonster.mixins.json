@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "cc.sighs.cannedmonster.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": ["MobAccess", "LivingEntityAccess", "AttributeMapAccess", "MobInteractionMixin", "EntitySaveMixin",
+    "PlayerInteractionMixin", "TargetingIdentityMixin", "TargetingGazeMixin", "ProjectileIdentityMixin", "QueryIdentityMixin",
+    "DamageIdentityMixin", "SpawnInheritanceMixin", "AppearanceDataAccess", "FoodOnAStickMixin",
+    "LivingLootAccess", "FusionLootMixin", "MemberEventMixin", "DisplayMobMixin", "DisplayEntityMixin", "GuardianAttackClockMixin", "GuardianPresentationMixin", "MemberGoalResetMixin",
+    "EntityTeleportMixin", "LivingEntityTeleportMixin", "ShulkerTeleportMixin",
+    "RidingPhysicsMixin", "RidingEntityMixin", "RidingNetworkMixin", "NavigationQueryMixin", "PursuitTravelMixin", "FusionPhysiologyMixin", "PlayerBodyGuardMixin", "PlayerMemberRotationMixin", "PlayerMemberLookMixin", "PlayerMemberMobMixin", "FusionAttributeWriteMixin", "PlayerMemberBrainMixin", "PlayerFusionLogoutMixin", "PlayerSelfInteractMixin"],
+  "client": ["AppearanceWalkMixin", "FusionRenderDispatcherMixin", "FusionEntityRendererMixin", "PlayerFlightMoveMixin", "ClientMemberEventMixin", "MemberSoundMixin", "GuardianEffectMixin", "MemberModelPassMixin"],
+  "injectors": { "defaultRequire": 1 }
+}

@@ -1,0 +1,1 @@
+{"type": "minecraft:crafting_shapeless", "category": "misc", "ingredients": ["cannedmonster:iron_can", "minecraft:redstone", "minecraft:gunpowder"], "result": {"id": "cannedmonster:throwable_monster_can", "count": 1}}

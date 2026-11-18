@@ -63,7 +63,7 @@ public final class RemovalCalls {
         Frame frame = ACTIVE.get().peek();
         if (frame == null || frame.reason != Entity.RemovalReason.KILLED || !(entity instanceof Mob child)
                 || frame.current == null || child.getType() != frame.current.getType()
-                || child.level() != frame.host.level() || child.isAddedToLevel() || child.isRemoved()
+                || child.level() != frame.host.level() || registered(child) || child.isRemoved()
                 || BodyLinks.isFacet(child) || !FusionRuntime.facets(child).isEmpty()
                 || !frame.origins.claim(child, frame.current)) return entity;
         List<Mob> members = new ArrayList<>();
@@ -76,11 +76,16 @@ public final class RemovalCalls {
                 members.add(copy);
             }
         }
-        Mob host = members.getLast();
+        Mob host = members.get(members.size() - 1);
         host.moveTo(child.getX(), child.getY(), child.getZ(), child.getYRot(), child.getXRot());
         host.setDeltaMovement(child.getDeltaMovement());
         FusionRuntime.attach(host, members.subList(0, members.size() - 1));
         return host;
+    }
+
+    private static boolean registered(Entity entity) {
+        return entity.level() instanceof net.minecraft.server.level.ServerLevel server
+                && server.getEntity(entity.getUUID()) != null;
     }
 
     private static final class Frame {

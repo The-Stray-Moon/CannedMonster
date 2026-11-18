@@ -16,8 +16,8 @@ public final class OrderedCalls {
                 try {
                     if (net.minecraft.world.entity.player.Player.class.isAssignableFrom(type)) {
                         Class<?> player = net.minecraft.world.entity.player.Player.class;
-                        methods.put(name, MethodHandles.privateLookupIn(player, MethodHandles.lookup())
-                                .findSpecial(player, name, MethodType.methodType(void.class), player));
+                        MethodHandles.Lookup lookup = MethodHandles.privateLookupIn(player, MethodHandles.lookup());
+                        methods.put(name, findSpecial(lookup, player, name));
                     } else {
                         Class<?> contract = type;
                         for (Class<?> parent = type; parent != null; parent = parent.getSuperclass()) {
@@ -26,7 +26,7 @@ public final class OrderedCalls {
                                 if (java.lang.reflect.Modifier.isPublic(parent.getDeclaredMethod(name).getModifiers())) contract = parent;
                             } catch (NoSuchMethodException ignored) {}
                         }
-                        methods.put(name, MethodHandles.publicLookup().findVirtual(contract, name, MethodType.methodType(void.class)));
+                        methods.put(name, findVirtual(contract, name));
                     }
                 } catch (ReflectiveOperationException exception) {
                     throw new IllegalStateException("Missing lifecycle entry " + type.getName() + "." + name, exception);
@@ -36,7 +36,34 @@ public final class OrderedCalls {
         }
     };
 
+    private static final Map<String, String> SRG = Map.of(
+            "tick", "m_8119_",
+            "aiStep", "m_8107_");
+
     private OrderedCalls() {
+    }
+
+    private static MethodHandle findVirtual(Class<?> owner, String name) throws ReflectiveOperationException {
+        MethodType type = MethodType.methodType(void.class);
+        try {
+            return MethodHandles.publicLookup().findVirtual(owner, name, type);
+        } catch (NoSuchMethodException missing) {
+            String srg = SRG.get(name);
+            if (srg == null) throw missing;
+            return MethodHandles.publicLookup().findVirtual(owner, srg, type);
+        }
+    }
+
+    private static MethodHandle findSpecial(MethodHandles.Lookup lookup, Class<?> owner, String name)
+            throws ReflectiveOperationException {
+        MethodType type = MethodType.methodType(void.class);
+        try {
+            return lookup.findSpecial(owner, name, type, owner);
+        } catch (NoSuchMethodException missing) {
+            String srg = SRG.get(name);
+            if (srg == null) throw missing;
+            return lookup.findSpecial(owner, srg, type, owner);
+        }
     }
 
     public static void bind(Object host, List<?> facets, Consumer<Object> aiBoundary) {

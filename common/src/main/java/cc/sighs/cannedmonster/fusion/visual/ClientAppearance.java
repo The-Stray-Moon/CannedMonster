@@ -31,7 +31,8 @@ public final class ClientAppearance {
             this.id = id;
             this.entity = entity;
             this.dataById = new HashMap<>();
-            for (var item : ((AppearanceData) entity.getEntityData()).cannedmonster$items()) dataById.put(item.getAccessor().id(), item);
+            AppearanceData data = (AppearanceData) entity.getEntityData();
+            for (var item : data.cannedmonster$items()) dataById.put(data.cannedmonster$id(item.getAccessor()), item);
         }
     }
     private record View(int entityId, List<Member> members, List<Mob> entities, int control, boolean flying, long received) {
@@ -90,11 +91,12 @@ public final class ClientAppearance {
     private static void apply(Member member, List<net.minecraft.network.syncher.SynchedEntityData.DataValue<?>> values, boolean fresh) {
         Mob entity = member.entity;
         var items = member.dataById;
+        AppearanceData data = (AppearanceData) entity.getEntityData();
         List<net.minecraft.network.syncher.SynchedEntityData.DataValue<?>> changed = new ArrayList<>();
         for (var value : values) {
             var item = items.get(value.id());
             if (item == null) throw new IllegalArgumentException("Unknown display data accessor " + value.id());
-            if (!Objects.equals(item.getAccessor().serializer(), value.serializer())) {
+            if (!Objects.equals(data.cannedmonster$serializer(item.getAccessor()), value.serializer())) {
                 throw new IllegalArgumentException("Mismatched display data serializer " + value.id());
             }
             if (fresh || !Objects.equals(item.getValue(), value.value())) changed.add(value);
