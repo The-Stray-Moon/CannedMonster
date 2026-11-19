@@ -17,6 +17,22 @@ Ordered native entity fusion
 
 原 `source-study/` 中的其他参考仓库、旧模板和缓存已删除。参考源码位于构建目录，手动清空根 `build/` 时也会删除；在 target 目录执行 `clean build` 不影响这份根目录参考源码。
 
+## 公共核心与版本后端
+
+NeoForge 1.21.1 仍是主要开发和验证版本，但公共层不再等同于 1.21.1 的整套 API 实现。1.20.1、1.21.1、26.1 均完整编译 `common/src/main/java`，已移除业务文件替换式 `commonJava exclude`。
+
+- 公共核心只维护一份融合会话、属性原始快照/均值、玩家速度、融合与取出、伤害/掉落调度、追击、外观/骑乘同步，以及罐头使用和投掷返还状态机。
+- target 的 `platform` 只适配确有差异的属性、NBT/组件、实体创建/保存、原生伤害句柄和网络发送；原生物品/投掷实体类只承接版本签名。属性快照用规范化字符串键，不向业务层传播 `ResourceLocation`/`Identifier`。
+- `platformJava` 显式选择兼容 API 胶水源码：`common/src/legacy/java` 用于 1.20.1/1.21.1 的旧投掷基类、战利品接口和旧渲染入口；`common/src/modern/java` 用于 1.21.1/26.1 的 Holder 属性接口。26.1 渲染后端仍独立，裁剪算法继续共用。不新增 Gradle 模块、不复制源码到 build、不做运行时版本分支。
+- 编译前的 `verifySharedSources` 拒绝已接入后端的目标过滤公共核心，并检查重复类归属，防止重新出现整类覆盖。
+
+### 本轮重构验证（2026-11-19）
+
+- 构建：`clean build verifyHotDebug` 在 NeoForge 1.21.1、Forge 1.20.1（offline，依赖缓存可用）和 NeoForge 26.1 均通过；测试数依次为 98、38、37，零失败。独立 `./gradlew -p common build` 也通过。`verifySharedSources` 确认三个目标均完整编译公共核心，没有 Java 源码 `exclude`。
+- 成品包：检查了每个最终 jar（1.21.1 的内嵌 `game.jar`），均包含同一套 `BaseCanItem`、`FusionRuntime`、`RidingSync` 和 `FusionLoot`，未由 target 同名业务类覆盖。
+- AutoJS shared-core 探针：Forge 1.20.1 成品客户端加载后，真实融合/剥离算法、成员不入世界、属性均值、实体存档/加载、物种顺序、大型罐捕获/还原及超容量拒绝共 11 项断言通过。后续玩家融合及真实投掷 tick 检查未完成：新建生存世界的玩家死亡导致 `FusionRuntime.attach` 拒绝 dead body；之后短生命周期 Rhino 求值上下文也无法跨调用保存 projectile probe，未把该部分记为通过。
+- 启动阻塞：NeoForge 1.21.1 packaged client 在游戏启动前由 `AppearanceDataAccess` Mixin 报目标不是 interface；NeoForge 26.1 packaged client 在构造期 `FusionRuntime.initialize` 报 binding slots 未安装，AutoJS 虽启动但没有可用 world side。故 1.21.1 与 26.1 的运行行为尚未验证；本轮不宣称三个目标功能兼容回归全部通过。
+
 ## 怪物罐头玩法（NeoForge 1.21.1）
 
 八个物品按提供的 48×48 九宫格原图顺序切成原生 16×16 材质，已加入创造模式“工具与实用物品”栏，中英文名称齐全。
@@ -132,7 +148,7 @@ Ordered native entity fusion
 
 ## Forge 1.20.1 迁移状态
 
-`targets/forge-1.20.1/` 已从模板迁移为可构建、可运行的实验 target。与 NeoForge 1.21.1 的已确证差异通过 target 的 `commonJava` 排除和 target 源码替换处理：组件/NBT、物品工具提示与使用时长、Forge 玩家事件、属性 `Holder`/`AttributeModifier`、网络 `SimpleChannel`、1.20.1 `VertexConsumer`、属性平均与玩家速度、追踪/外观同步等。共享层补充了 Java 17 兼容（`List.getFirst/getLast`、`ResourceLocation.tryParse`）及 1.20.1 SRG 名称后备。
+`targets/forge-1.20.1/` 已从模板迁移为可构建、可运行的实验 target。与 NeoForge 1.21.1 的已确证 API 差异由 target 后端和显式版本族胶水处理：组件/NBT、物品签名、Forge 玩家事件、属性 `Holder`/`AttributeModifier`、网络 `SimpleChannel` 与 1.20.1 `VertexConsumer` 等。属性平均、玩家速度、融合事务和追踪/外观同步算法均只保留公共实现，不再整类排除替换。共享层补充了 Java 17 兼容（`List.getFirst/getLast`、`ResourceLocation.tryParse`）及 1.20.1 SRG 名称后备。
 
 构建与打包：
 
@@ -152,7 +168,7 @@ Ordered native entity fusion
 
 `targets/neoforge-26.1/` 已从模板迁移为可构建、可启动的实验 target。NeoForge 26.1 移除了 ModLauncher，FML 11 改用 `net.neoforged.neoforgespi.transformation.ClassProcessor`；本 target 因此不再使用 1.21.1 的内嵌游戏 jar + `ITransformationService` 方案，而是普通单 jar：`META-INF/services/net.neoforged.neoforgespi.transformation.ClassProcessor` 声明 `cc.sighs.cannedmonster.bootstrap.FusionClassProcessor`，由它把本模组的 `BodyTransformer`（字段重定向、`BoundObject` 槽、生命周期续接、`hurtServer`/`convertTo`/导航钩子）注册到全局类处理器链，并声明在 Mixin 之前运行。
 
-与 1.21.1 的已确证差异通过 target 的 `commonJava` 排除和 target 源码替换处理：`ResourceLocation`→`Identifier`、`UseAnim`→`ItemUseAnimation`、`MobSpawnType`→`EntitySpawnReason`、`InteractionResultHolder` 移除、`ThrowableItemProjectile` 包移动、`CompoundTag` 的 Optional/Value IO、`Entity.saveWithoutId(ValueOutput)`/`load(ValueInput)`、`hurt` 变 final 后的 `hurtServer(ServerLevel, DamageSource, float)`、`doHurtTarget(ServerLevel, Entity)`、三参数 `startRiding`、`Level.isClientSide()`/`getRandom()`、`shouldDropLoot(ServerLevel)`/`dropEquipment(ServerLevel)`、`isControlledByLocalInstance`→`isLocalInstanceAuthoritative`、`Brain` 记忆重载、`WaterAnimal` 包移动、属性 id 去前缀（`minecraft:movement_speed` 等）、实体渲染改为 `EntityRenderState` + `SubmitNodeCollector` 管线、物品模型需要 `assets/<ns>/items/<id>.json`、配方原料需要字符串形式。旧存档中的 `generic.*` 属性 id 在加载时按去前缀规则归一化。
+与 1.21.1 的已确证差异通过编译期后端和版本族胶水处理，不再替换公共业务源码：`ResourceLocation`→`Identifier`、`UseAnim`→`ItemUseAnimation`、`MobSpawnType`→`EntitySpawnReason`、`InteractionResultHolder` 移除、`ThrowableItemProjectile` 包移动、`CompoundTag` 的 Optional/Value IO、`Entity.saveWithoutId(ValueOutput)`/`load(ValueInput)`、`hurt` 变 final 后的 `hurtServer(ServerLevel, DamageSource, float)`、`doHurtTarget(ServerLevel, Entity)`、三参数 `startRiding`、`Level.isClientSide()`/`getRandom()`、`shouldDropLoot(ServerLevel)`/`dropEquipment(ServerLevel)`、`isControlledByLocalInstance`→`isLocalInstanceAuthoritative`、`Brain` 记忆重载、`WaterAnimal` 包移动、属性 id 去前缀（`minecraft:movement_speed` 等）、实体渲染改为 `EntityRenderState` + `SubmitNodeCollector` 管线、物品模型需要 `assets/<ns>/items/<id>.json`、配方原料需要字符串形式。旧存档中的 `generic.*` 属性 id 在加载时按去前缀规则归一化。
 
 构建与启动：
 
@@ -387,7 +403,7 @@ NeoForge 21.1.234 / Minecraft 1.21.1 / JDK 21；开发客户端加载 AutoJS 1.0
 - 全版本：IDEA 打开 `idea-workspace/`；当前主版本为 **neoforge-1.21.1**，配置的 Gradle JVM 为 **JDK 21**。该值来自 target 描述文件，仍须核对工作区 wrapper 与所用 JDK 的兼容性。
 - 工作区只完整导入主 target。其他版本、文档、脚本及根配置作为仓库浏览内容展示，不承诺非主版本的 API 补全。common 源码只归属主 target，不额外关联根工程、common 或其他完整 target。
 - 切换主版本修改 `idea-workspace/gradle.properties` 的 `workspace_main_target` 后重新加载 Gradle。composite build 共用工作区的 Gradle/JVM，不使用被包含 target 的 wrapper；若不兼容，独立打开 target 或调整工作区工具链。
-- 普通 common 内容修改无需运行源码同步任务；变更 Gradle 配置或 `commonJava` 排除规则后需重新加载 Gradle。
+- 普通 common 内容修改无需运行源码同步任务；变更 Gradle 配置或 `platformJava` 后端源码集后需重新加载 Gradle。
 
 在所选 target 目录执行：
 
@@ -399,7 +415,7 @@ NeoForge 21.1.234 / Minecraft 1.21.1 / JDK 21；开发客户端加载 AutoJS 1.0
 # 或 runServer；Minecraft EULA 必须由用户阅读并接受
 ```
 
-在仓库根可执行 `./gradlew -p common build` 单独检查共享层。该独立构建以 NeoForge 1.21.1 主 target 的类路径编译并运行共享测试；1.20.1 差异由 `targets/forge-1.20.1` 的源码替换覆盖，不能替代目标矩阵验证。根 `-Ptarget=<目录名> build` 调用该 target 的独立 wrapper；`-PallTargets=true build` 自动选择已启用且 `ci.java` 不高于当前 Gradle JVM 的目标，并打印跳过项。最低 JDK 筛选不保证旧 wrapper 支持任意新版 JDK，必要时分别构建。根 `build` 默认只验证 common。
+在仓库根可执行 `./gradlew -p common build` 单独检查共享层。该独立构建以 NeoForge 1.21.1 主 target 的类路径编译并运行共享测试；同时显式接入 1.21.1 API 后端与兼容版本族胶水，不依赖排除替换；该检查不能替代三个目标各自的构建和运行验证。根 `-Ptarget=<目录名> build` 调用该 target 的独立 wrapper；`-PallTargets=true build` 自动选择已启用且 `ci.java` 不高于当前 Gradle JVM 的目标，并打印跳过项。最低 JDK 筛选不保证旧 wrapper 支持任意新版 JDK，必要时分别构建。根 `build` 默认只验证 common。
 
 ## AutoJS 热调试与热执行
 

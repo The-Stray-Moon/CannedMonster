@@ -51,12 +51,12 @@ public final class FusionRiding {
 
     public static boolean authoritative(Entity entity) {
         return BodyLinks.body(entity) instanceof Mob body && (FusionMotion.isFusionBody(body)
-                || body.level().isClientSide && FusionMotion.clientFusion(body));
+                || body.level().isClientSide() && FusionMotion.clientFusion(body));
     }
 
     public static boolean travel(LivingEntity entity, Player rider, Vec3 originalInput) {
         if (!(entity instanceof Mob body) || !authoritative(body)) return false;
-        if (body.level().isClientSide) return true;
+        if (body.level().isClientSide()) return true;
         Mob source = source(body);
         if (source == null || body.getFirstPassenger() != rider) return true;
         Frame frame = new Frame(body, source, rider, FusionMotion.of(body));
@@ -84,7 +84,7 @@ public final class FusionRiding {
     }
 
     public static boolean move(Entity entity, MoverType type, Vec3 delta) {
-        if (entity.level().isClientSide && authoritative(entity)) return true;
+        if (entity.level().isClientSide() && authoritative(entity)) return true;
         if (!BodyLinks.isFacet(entity)) return false;
         Frame frame = EXECUTION.get();
         if (frame != null && frame.valid() && frame.source == entity) {

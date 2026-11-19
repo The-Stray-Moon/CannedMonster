@@ -1,0 +1,46 @@
+package cc.sighs.cannedmonster.can;
+
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResultHolder;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.world.item.UseAnim;
+import net.minecraft.world.level.Level;
+
+import java.util.List;
+import java.util.function.Supplier;
+
+public final class MonsterCanItem extends BaseCanItem {
+    public MonsterCanItem(boolean large, boolean throwable, boolean random, boolean spatial,
+                          Supplier<? extends EntityType<ThrownCan>> projectileType) {
+        super(new Properties(), large, throwable, random, spatial, projectileType);
+    }
+
+    @Override
+    public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
+        ItemStack stack = player.getItemInHand(hand);
+        return beginUse(level, player, hand) ? InteractionResultHolder.consume(stack) : InteractionResultHolder.pass(stack);
+    }
+
+    @Override
+    public int getUseDuration(ItemStack stack, LivingEntity entity) { return duration(stack); }
+
+    @Override
+    public UseAnim getUseAnimation(ItemStack stack) {
+        return throwable ? UseAnim.BOW : CanContents.filled(stack) ? UseAnim.EAT : UseAnim.NONE;
+    }
+
+    @Override
+    public void releaseUsing(ItemStack stack, Level level, LivingEntity entity, int remainingTicks) {
+        release(stack, level, entity, remainingTicks);
+    }
+
+    @Override
+    public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
+        tooltip(stack, tooltip::add);
+    }
+}

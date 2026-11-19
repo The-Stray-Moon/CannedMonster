@@ -1,8 +1,7 @@
 package cc.sighs.cannedmonster.fusion;
 
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.entity.FlyingMob;
+import cc.sighs.cannedmonster.platform.EntityAccess;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -14,7 +13,6 @@ import net.minecraft.world.entity.player.Player;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Set;
@@ -24,28 +22,25 @@ import java.util.Set;
  * extra list for species with custom movement (Vex, Bat, EnderDragon by default).
  */
 public final class FlightRules {
-    public static final Set<ResourceLocation> DEFAULT_EXTRA = Set.of(
-            ResourceLocation.tryParse("minecraft:vex"),
-            ResourceLocation.tryParse("minecraft:bat"),
-            ResourceLocation.tryParse("minecraft:ender_dragon"));
-    private static volatile Set<ResourceLocation> extra = DEFAULT_EXTRA;
+    public static final Set<String> DEFAULT_EXTRA = Set.of(
+            "minecraft:vex", "minecraft:bat", "minecraft:ender_dragon");
+    private static volatile Set<String> extra = DEFAULT_EXTRA;
     private static final Set<Player> APPLIED = Collections.synchronizedSet(
             Collections.newSetFromMap(new IdentityHashMap<>()));
 
-    private FlightRules() {
-    }
+    private FlightRules() {}
 
-    public static void setExtraTypes(Collection<ResourceLocation> types) {
-        extra = Set.copyOf(new HashSet<>(types));
+    public static void setExtraTypes(Collection<String> types) {
+        extra = Set.copyOf(types);
         FusionRuntime.refreshFlights();
     }
 
-    public static Set<ResourceLocation> extraTypes() {
+    public static Set<String> extraTypes() {
         return extra;
     }
 
     public static boolean structurallyFlies(Mob mob) {
-        return mob instanceof FlyingMob
+        return EntityAccess.flyingBase(mob)
                 || mob instanceof FlyingAnimal
                 || mob.getMoveControl() instanceof FlyingMoveControl
                 || mob.getNavigation() instanceof FlyingPathNavigation
@@ -53,7 +48,7 @@ public final class FlightRules {
     }
 
     public static boolean flies(Mob mob) {
-        return structurallyFlies(mob) || extra.contains(BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType()));
+        return structurallyFlies(mob) || extra.contains(BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType()).toString());
     }
 
     public static boolean hasFlight(LivingEntity body) {

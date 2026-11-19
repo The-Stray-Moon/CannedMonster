@@ -13,7 +13,7 @@ public final class DisplayExecution {
     private DisplayExecution() {}
 
     public static void register(Entity entity) { MEMBERS.add(entity); }
-    public static boolean member(Entity entity) { return entity.level().isClientSide && MEMBERS.contains(entity); }
+    public static boolean member(Entity entity) { return cc.sighs.cannedmonster.platform.EntityAccess.clientSide(entity.level()) && MEMBERS.contains(entity); }
     public static Entity current() { return CURRENT.get(); }
 
     public static void run(Entity member, Runnable action) {

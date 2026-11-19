@@ -4,7 +4,6 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.player.Player;
-import net.neoforged.neoforge.fluids.FluidType;
 
 import java.util.List;
 import java.util.function.Predicate;
@@ -15,7 +14,7 @@ public final class FusionTraits {
     private FusionTraits() {}
 
     private static List<Mob> members(LivingEntity body) {
-        return body.level().isClientSide
+        return body.level().isClientSide()
                 ? cc.sighs.cannedmonster.fusion.visual.ClientAppearance.members(body) : FusionRuntime.facets(body);
     }
 
@@ -36,8 +35,8 @@ public final class FusionTraits {
         return original || any(entity, Mob::canBreatheUnderwater);
     }
 
-    public static boolean canDrown(LivingEntity entity, FluidType type, boolean original) {
-        return original && !any(entity, member -> !member.canDrownInFluidType(type));
+    public static boolean canDrown(LivingEntity entity, Predicate<Mob> canDrown, boolean original) {
+        return original && !any(entity, canDrown.negate());
     }
 
     public static LivingEntity gazeTarget(Player player) {
@@ -56,7 +55,7 @@ public final class FusionTraits {
     }
 
     public static boolean invulnerable(Entity entity, net.minecraft.world.damagesource.DamageSource source, boolean original) {
-        return original || any(entity, member -> member.isInvulnerableTo(source));
+        return original || any(entity, member -> cc.sighs.cannedmonster.platform.EntityAccess.invulnerable(member, source));
     }
 
     public static boolean affected(LivingEntity entity, net.minecraft.world.effect.MobEffectInstance effect, boolean original) {

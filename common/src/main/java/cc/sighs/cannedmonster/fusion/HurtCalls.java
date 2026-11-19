@@ -5,8 +5,6 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 
 import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
-import java.lang.invoke.MethodType;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -18,20 +16,7 @@ public final class HurtCalls {
         @Override
         protected MethodHandle computeValue(Class<?> type) {
             try {
-                MethodType signature = MethodType.methodType(boolean.class, DamageSource.class, float.class);
-                if (Player.class.isAssignableFrom(type)) {
-                    MethodHandles.Lookup lookup = MethodHandles.privateLookupIn(Player.class, MethodHandles.lookup());
-                    try {
-                        return lookup.findSpecial(Player.class, "hurt", signature, Player.class);
-                    } catch (NoSuchMethodException missing) {
-                        return lookup.findSpecial(Player.class, "m_6469_", signature, Player.class);
-                    }
-                }
-                try {
-                    return MethodHandles.publicLookup().findVirtual(LivingEntity.class, "hurt", signature);
-                } catch (NoSuchMethodException missing) {
-                    return MethodHandles.publicLookup().findVirtual(LivingEntity.class, "m_6469_", signature);
-                }
+                return cc.sighs.cannedmonster.platform.NativeHurt.bind(type);
             } catch (ReflectiveOperationException failure) {
                 throw new IllegalStateException("Cannot bind native hurt for " + type.getName(), failure);
             }
@@ -46,7 +31,12 @@ public final class HurtCalls {
     }
 
     public static Boolean dispatch(LivingEntity receiver, DamageSource source, float amount, boolean boundary) {
-        if (!(BodyLinks.body(receiver) instanceof Player player) || player.level().isClientSide) return null;
+        return receiver.level() instanceof net.minecraft.server.level.ServerLevel level
+                ? dispatch(receiver, level, source, amount, boundary) : null;
+    }
+
+    public static Boolean dispatch(LivingEntity receiver, net.minecraft.server.level.ServerLevel level, DamageSource source, float amount, boolean boundary) {
+        if (!(BodyLinks.body(receiver) instanceof Player player) || player.level().isClientSide()) return null;
         var facets = FusionRuntime.facets(player);
         if (facets.isEmpty()) return null;
         Deque<Frame> frames = FRAMES.get();
@@ -64,7 +54,7 @@ public final class HurtCalls {
         if (receiver != player) return boundary ? Boolean.FALSE : null;
         List<LivingEntity> members = new ArrayList<>(facets);
         members.add(player);
-        Frame frame = new Frame(player, List.copyOf(members), source, amount);
+        Frame frame = new Frame(player, List.copyOf(members), level, source, amount);
         frames.push(frame);
         try {
             advance(frame, 0);
@@ -84,7 +74,7 @@ public final class HurtCalls {
         frame.index = index;
         frame.advanced = false;
         try {
-            boolean result = (boolean) METHODS.get(frame.current.getClass()).invoke(frame.current, frame.source, frame.amount);
+            boolean result = (boolean) METHODS.get(frame.current.getClass()).invoke(frame.current, frame.level, frame.source, frame.amount);
             if (frame.current == frame.player) frame.result = result;
             if (!frame.advanced && frame.current != frame.player) advance(frame, index + 1);
         } catch (RuntimeException | Error failure) {
@@ -101,6 +91,7 @@ public final class HurtCalls {
     private static final class Frame {
         final Player player;
         final List<LivingEntity> members;
+        final net.minecraft.server.level.ServerLevel level;
         DamageSource source;
         float amount;
         LivingEntity current;
@@ -108,9 +99,10 @@ public final class HurtCalls {
         boolean advanced;
         boolean result;
 
-        Frame(Player player, List<LivingEntity> members, DamageSource source, float amount) {
+        Frame(Player player, List<LivingEntity> members, net.minecraft.server.level.ServerLevel level, DamageSource source, float amount) {
             this.player = player;
             this.members = members;
+            this.level = level;
             this.source = source;
             this.amount = amount;
         }

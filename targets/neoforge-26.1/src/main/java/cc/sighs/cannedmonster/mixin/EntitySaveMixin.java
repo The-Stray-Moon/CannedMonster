@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class EntitySaveMixin {
     @Inject(method = "saveWithoutId", at = @At("RETURN"))
     private void cannedmonster$save(ValueOutput output, CallbackInfo callback) {
-        FusionRuntime.save((Entity) (Object) this, output);
+        cc.sighs.cannedmonster.platform.EntityStorage.saveFusion((Entity) (Object) this, output);
     }
 
     @Inject(method = "setRemoved", at = @At("RETURN"))
@@ -26,6 +26,6 @@ public abstract class EntitySaveMixin {
 
     @Inject(method = "load", at = @At("RETURN"))
     private void cannedmonster$load(ValueInput input, CallbackInfo callback) {
-        FusionRuntime.load((Entity) (Object) this, input);
+        cc.sighs.cannedmonster.platform.EntityStorage.loadFusion((Entity) (Object) this, input);
     }
 }

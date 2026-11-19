@@ -22,7 +22,7 @@ public final class ClientRiding {
     }
 
     public static void leave(net.minecraft.world.entity.Entity entity) {
-        if (entity.level().isClientSide) STATES.remove(entity.getUUID());
+        if (cc.sighs.cannedmonster.platform.EntityAccess.clientSide(entity.level())) STATES.remove(entity.getUUID());
     }
 
     public static void tick() {

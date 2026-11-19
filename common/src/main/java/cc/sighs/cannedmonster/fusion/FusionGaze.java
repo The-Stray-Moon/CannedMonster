@@ -29,7 +29,7 @@ public final class FusionGaze {
     }
 
     public static LivingEntity target(Player player) {
-        if (player.level().isClientSide || player.isRemoved() || !player.isAlive() || player.isSpectator()) {
+        if (cc.sighs.cannedmonster.platform.EntityAccess.clientSide(player.level()) || player.isRemoved() || !player.isAlive() || player.isSpectator()) {
             return null;
         }
         Entry cached = CACHE.get(player);

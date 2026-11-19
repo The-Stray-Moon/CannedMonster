@@ -4,17 +4,14 @@ import cc.sighs.cannedmonster.fusion.BodyLinks;
 import cc.sighs.cannedmonster.fusion.FlightRules;
 import cc.sighs.cannedmonster.fusion.FusionMotion;
 import cc.sighs.cannedmonster.fusion.FusionRuntime;
+import cc.sighs.cannedmonster.platform.AppearanceTransport;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
-import net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent;
-import net.neoforged.neoforge.event.entity.player.PlayerEvent;
-import net.neoforged.neoforge.event.server.ServerStoppedEvent;
-import net.neoforged.neoforge.event.tick.EntityTickEvent;
-import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.*;
 
@@ -32,22 +29,21 @@ public final class AppearanceSync {
 
     private AppearanceSync() {}
 
-    public static boolean broadcast(net.minecraft.world.entity.Entity source, byte event) {
+    public static boolean broadcast(Entity source, byte event) {
         Object linked = BodyLinks.body(source);
-        if (linked == source || !(linked instanceof LivingEntity body) || source.level().isClientSide) return false;
+        if (linked == source || !(linked instanceof LivingEntity body) || source.level().isClientSide()) return false;
         int index = FusionRuntime.facets(body).indexOf(source);
         if (index < 0) return true;
         FusionAppearance state = snapshot(body);
         MemberEvent packet = new MemberEvent(state, state.members().get(index).id(), state.revision(), event);
-        PacketDistributor.sendToPlayersTrackingEntity(body, packet);
-        if (body instanceof ServerPlayer player) PacketDistributor.sendToPlayer(player, packet);
+        AppearanceTransport.broadcast(body, packet);
         Composition composition = COMPOSITIONS.get(body);
         if (composition != null) composition.sent = state;
         return true;
     }
 
-    public static void tick(EntityTickEvent.Post event) {
-        if (!(event.getEntity() instanceof LivingEntity body) || body.level().isClientSide || body.tickCount % 2 != 0) return;
+    public static void tick(Entity entity) {
+        if (!(entity instanceof LivingEntity body) || body.level().isClientSide() || body.tickCount % 2 != 0) return;
         if (FusionRuntime.facets(body).isEmpty() && !COMPOSITIONS.containsKey(body)) return;
         FusionAppearance state = snapshot(body);
         Composition composition = COMPOSITIONS.get(body);
@@ -60,8 +56,7 @@ public final class AppearanceSync {
             composition.sent = state;
             composition.full = false;
         }
-        PacketDistributor.sendToPlayersTrackingEntity(body, packet);
-        if (body instanceof ServerPlayer player) PacketDistributor.sendToPlayer(player, packet);
+        AppearanceTransport.broadcast(body, packet);
     }
 
     static FusionAppearance delta(FusionAppearance previous, FusionAppearance current) {
@@ -80,19 +75,18 @@ public final class AppearanceSync {
                 current.revision(), false, List.copyOf(members)) : null;
     }
 
-    public static void tracking(PlayerEvent.StartTracking event) {
-        if (event.getTarget() instanceof LivingEntity body && event.getEntity() instanceof ServerPlayer player
-                && !FusionRuntime.facets(body).isEmpty()) {
-            PacketDistributor.sendToPlayer(player, snapshot(body));
+    public static void tracking(Entity target, ServerPlayer player) {
+        if (target instanceof LivingEntity body && !FusionRuntime.facets(body).isEmpty()) {
+            AppearanceTransport.send(player, snapshot(body));
             COMPOSITIONS.get(body).full = true;
         }
     }
 
-    public static void leave(EntityLeaveLevelEvent event) {
-        if (!event.getLevel().isClientSide) COMPOSITIONS.remove(event.getEntity());
+    public static void leave(Entity entity) {
+        if (!entity.level().isClientSide()) COMPOSITIONS.remove(entity);
     }
 
-    public static void stop(ServerStoppedEvent event) { COMPOSITIONS.clear(); }
+    public static void stop() { COMPOSITIONS.clear(); }
 
     private static FusionAppearance snapshot(LivingEntity body) {
         List<Mob> facets = FusionRuntime.facets(body);
@@ -121,7 +115,7 @@ public final class AppearanceSync {
             List<SynchedEntityData.DataValue<?>> values = new ArrayList<>();
             for (var item : ((AppearanceData) facet.getEntityData()).cannedmonster$items()) {
                 var previous = before != null && values.size() < before.data().size() ? before.data().get(values.size()) : null;
-                values.add(value(facet, item, previous));
+                values.add(AppearanceTransport.value(facet, item, previous));
             }
             CompoundTag presentation = facet instanceof PresentationState state ? state.cannedmonster$capturePresentation() : new CompoundTag();
             members.add(new FusionAppearance.Member(composition.ids.get(i), BuiltInRegistries.ENTITY_TYPE.getKey(facet.getType()),
@@ -129,13 +123,5 @@ public final class AppearanceSync {
         }
         int control = body instanceof Mob mob ? FusionMotion.controlIndex(mob) : -1;
         return new FusionAppearance(body.getId(), body.getUUID(), control, FlightRules.hasFlight(body), ++revision, true, List.copyOf(members));
-    }
-
-    private static <T> SynchedEntityData.DataValue<?> value(Mob facet, SynchedEntityData.DataItem<T> item,
-                                                           SynchedEntityData.DataValue<?> previous) {
-        T current = facet.getEntityData().get(item.getAccessor());
-        if (previous != null && previous.id() == item.getAccessor().id() && previous.serializer() == item.getAccessor().serializer()
-                && Objects.equals(previous.value(), current)) return previous;
-        return SynchedEntityData.DataValue.create(item.getAccessor(), current);
     }
 }

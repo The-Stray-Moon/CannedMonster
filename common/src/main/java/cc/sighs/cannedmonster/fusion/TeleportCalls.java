@@ -49,7 +49,7 @@ public final class TeleportCalls {
             }
             return Status.NONE;
         }
-        if (player.level().isClientSide || !player.isAlive() || player.isRemoved()
+        if (cc.sighs.cannedmonster.platform.EntityAccess.clientSide(player.level()) || !player.isAlive() || player.isRemoved()
                 || player.isPassenger() || player.isVehicle()) {
             return Status.DENIED;
         }

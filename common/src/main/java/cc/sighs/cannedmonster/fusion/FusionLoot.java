@@ -1,5 +1,6 @@
 package cc.sighs.cannedmonster.fusion;
 
+import cc.sighs.cannedmonster.platform.LootAccess;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.LivingEntity;
@@ -19,26 +20,36 @@ public final class FusionLoot {
     }
 
     public static void equipment(LivingEntity body) {
-        for (LivingEntity member : members(body)) ((NativeLootAccess) member).cannedmonster$equipmentLoot();
+        equipment((ServerLevel) body.level(), body);
+    }
+
+    public static void equipment(ServerLevel level, LivingEntity body) {
+        for (LivingEntity member : members(body)) LootAccess.equipment(level, member);
     }
 
     public static boolean eligible(LivingEntity body) {
-        return members(body).stream().anyMatch(member -> ((NativeLootAccess) member).cannedmonster$shouldDropLoot());
+        return eligible((ServerLevel) body.level(), body);
+    }
+
+    public static boolean eligible(ServerLevel level, LivingEntity body) {
+        return members(body).stream().anyMatch(member -> LootAccess.eligible(level, member));
     }
 
     public static void tables(LivingEntity body, DamageSource source, boolean playerKill) {
+        tables((ServerLevel) body.level(), body, source, playerKill);
+    }
+
+    public static void tables(ServerLevel level, LivingEntity body, DamageSource source, boolean playerKill) {
         var members = members(body);
         for (LivingEntity member : members) {
-            NativeLootAccess access = (NativeLootAccess) member;
-            if (members.size() == 1 || access.cannedmonster$shouldDropLoot()) access.cannedmonster$lootTable(source, playerKill);
+            if (members.size() == 1 || LootAccess.eligible(level, member)) LootAccess.table(level, member, source, playerKill);
         }
     }
 
     public static void custom(LivingEntity body, ServerLevel level, DamageSource source, boolean playerKill) {
         var members = members(body);
         for (LivingEntity member : members) {
-            NativeLootAccess access = (NativeLootAccess) member;
-            if (members.size() == 1 || access.cannedmonster$shouldDropLoot()) access.cannedmonster$customLoot(level, source, playerKill);
+            if (members.size() == 1 || LootAccess.eligible(level, member)) LootAccess.custom(level, member, source, playerKill);
         }
     }
 }

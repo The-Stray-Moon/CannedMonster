@@ -4,13 +4,12 @@ import cc.sighs.cannedmonster.can.CanActions;
 import cc.sighs.cannedmonster.can.CanContents;
 import cc.sighs.cannedmonster.can.MonsterCanItem;
 import com.mojang.logging.LogUtils;
-import net.minecraft.core.component.DataComponents;
+import cc.sighs.cannedmonster.platform.PlayerAccess;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.network.chat.Component;
-import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -26,7 +25,7 @@ public final class PlayerFusion {
     }
 
     private static boolean valid(Player player, ItemStack stack) {
-        return !player.level().isClientSide && player.isAlive() && !player.isRemoved() && !player.isSpectator()
+        return !player.level().isClientSide() && player.isAlive() && !player.isRemoved() && !player.isSpectator()
                 && !UNRESOLVED.containsKey(player) && stack.getItem() instanceof MonsterCanItem item && item.storesMobs();
     }
 
@@ -42,7 +41,7 @@ public final class PlayerFusion {
             return true;
         } catch (RuntimeException failure) {
             LogUtils.getLogger().warn("Cannot fuse can into player: {}", failure.toString());
-            player.displayClientMessage(Component.translatable("message.cannedmonster.failed"), true);
+            PlayerAccess.message(player, Component.translatable("message.cannedmonster.failed"));
             return false;
         } finally {
             if (incoming != null && !BodyLinks.isFacet(incoming)) FusionRuntime.detach(incoming);
@@ -59,11 +58,11 @@ public final class PlayerFusion {
                 CanContents.store(prepared, FusionRuntime.packAll(player), "", members.size());
                 FusionRuntime.stripAll(player);
             } else {
-                Mob member = facets(player).getFirst();
+                Mob member = facets(player).get(0);
                 CanContents.store(prepared, FusionRuntime.independentSave(member), member.getName().getString(), 1);
                 FusionRuntime.peel(player);
             }
-            stack.set(DataComponents.CUSTOM_DATA, prepared.get(DataComponents.CUSTOM_DATA));
+            PlayerAccess.copyContents(prepared, stack);
             return true;
         } catch (RuntimeException failure) {
             LogUtils.getLogger().warn("Cannot extract player fusion member: {}", failure.toString());
@@ -87,11 +86,8 @@ public final class PlayerFusion {
         return true;
     }
 
-    public static void clone(PlayerEvent.Clone event) {
-        if (!event.getEntity().level().isClientSide) copy(event.getOriginal(), event.getEntity());
-    }
-
     public static void copy(Player original, Player fresh) {
+        if (fresh.level().isClientSide()) return;
         CompoundTag saved = new CompoundTag();
         FusionRuntime.save(original, saved);
         FusionRuntime.detach(original);
@@ -104,8 +100,7 @@ public final class PlayerFusion {
         UNRESOLVED.remove(player);
     }
 
-    public static void dimension(PlayerEvent.PlayerChangedDimensionEvent event) {
-        Player player = event.getEntity();
+    public static void dimension(Player player) {
         if (facets(player).isEmpty()) return;
         CompoundTag saved = new CompoundTag();
         FusionRuntime.save(player, saved);

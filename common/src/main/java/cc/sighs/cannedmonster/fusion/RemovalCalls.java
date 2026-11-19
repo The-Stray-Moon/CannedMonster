@@ -31,7 +31,7 @@ public final class RemovalCalls {
             return boundary && entity != host;
         }
         List<Mob> facets = FusionRuntime.facets(host);
-        if (facets.isEmpty() || host.level().isClientSide) return false;
+        if (facets.isEmpty() || host.level().isClientSide()) return false;
         List<Mob> members = new ArrayList<>(facets);
         members.add(host);
         frame = new Frame(host, List.copyOf(members), reason);
@@ -50,13 +50,22 @@ public final class RemovalCalls {
     }
 
     public static Entity create(EntityType<?> type, Level level, Entity source) {
-        Entity child = type.create(level);
+        Entity child = cc.sighs.cannedmonster.platform.EntityStorage.create(type, level);
         Frame frame = ACTIVE.get().peek();
         if (frame != null && frame.reason == Entity.RemovalReason.KILLED && frame.current == source
                 && source.getType() == type && source.level() == level) {
             frame.origins.record(child, source);
         }
         return child;
+    }
+
+    public static void recordConversion(Entity source, Entity child) {
+        if (source == null || child == null) return;
+        Frame frame = ACTIVE.get().peek();
+        if (frame != null && frame.reason == Entity.RemovalReason.KILLED && frame.current == source
+                && source.getType() == child.getType()) {
+            frame.origins.record(child, source);
+        }
     }
 
     public static Entity inherit(Entity entity) {
@@ -71,13 +80,13 @@ public final class RemovalCalls {
             if (source == frame.current) {
                 members.add(child);
             } else {
-                Entity created = source.getType().create(child.level());
+                Entity created = cc.sighs.cannedmonster.platform.EntityStorage.create(source.getType(), child.level());
                 if (!(created instanceof Mob copy)) throw new IllegalStateException("Cannot recreate fusion member " + source.getType());
                 members.add(copy);
             }
         }
         Mob host = members.get(members.size() - 1);
-        host.moveTo(child.getX(), child.getY(), child.getZ(), child.getYRot(), child.getXRot());
+        cc.sighs.cannedmonster.platform.EntityStorage.position(host, child);
         host.setDeltaMovement(child.getDeltaMovement());
         FusionRuntime.attach(host, members.subList(0, members.size() - 1));
         return host;

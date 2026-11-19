@@ -1,10 +1,8 @@
 package cc.sighs.cannedmonster.fusion;
 
-import net.minecraft.resources.ResourceLocation;
+import cc.sighs.cannedmonster.platform.AttributeAccess;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
-import net.minecraft.world.entity.ai.attributes.AttributeModifier;
-import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.control.MoveControl;
 import net.minecraft.world.entity.ai.navigation.GroundPathNavigation;
 import net.minecraft.world.entity.player.Player;
@@ -14,21 +12,14 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Player speed is not the raw movement-speed attribute of a mob. Standard ground mobs feed the
- * movement control value back into setSpeed, so their per-tick drive scales with the attribute
- * squared; the player's own input is normalized and scales only with the attribute. Keep the
- * player's base untouched and expose the fused difference as one removable modifier.
- */
 public final class PlayerSpeed {
-    static final ResourceLocation ATTRIBUTE = ResourceLocation.parse("minecraft:generic.movement_speed");
-    static final ResourceLocation MODIFIER = ResourceLocation.fromNamespaceAndPath("cannedmonster", "fusion_speed");
+    static final String ATTRIBUTE = AttributeAccess.MOVEMENT_SPEED;
     private static final double EPSILON = 1.0E-9;
     private static final Map<Player, double[]> EQUIVALENTS = Collections.synchronizedMap(new IdentityHashMap<>());
 
     private PlayerSpeed() {}
 
-    public static void apply(Player player, List<Mob> members, List<Map<ResourceLocation, Double>> origins) {
+    public static void apply(Player player, List<Mob> members, List<Map<String, Double>> origins) {
         AttributeAverages.track(player);
         migrate(player, origins);
         double[] equivalents = new double[members.size()];
@@ -41,30 +32,24 @@ public final class PlayerSpeed {
     }
 
     public static void refresh(Player player) {
-        AttributeInstance instance = player.getAttribute(Attributes.MOVEMENT_SPEED);
+        AttributeInstance instance = AttributeAccess.speed(player);
         double[] equivalents = EQUIVALENTS.get(player);
-        if (instance == null || equivalents == null) {
-            if (instance != null) instance.removeModifier(MODIFIER);
-            return;
-        }
+        if (instance == null) return;
+        AttributeAccess.removeSpeed(instance);
+        if (equivalents == null) return;
         double base = instance.getBaseValue();
-        double sum = base;
-        for (double equivalent : equivalents) sum += Double.isNaN(equivalent) ? base : equivalent;
-        double target = sum / (equivalents.length + 1);
-        instance.removeModifier(MODIFIER);
-        if (Math.abs(target - base) > EPSILON) {
-            instance.addTransientModifier(new AttributeModifier(MODIFIER, target - base, AttributeModifier.Operation.ADD_VALUE));
-        }
+        double target = target(base, equivalents);
+        if (Math.abs(target - base) > EPSILON) AttributeAccess.addSpeed(instance, target - base);
     }
 
     public static void clear(Player player) {
         EQUIVALENTS.remove(player);
-        AttributeInstance instance = player.getAttribute(Attributes.MOVEMENT_SPEED);
-        if (instance != null) instance.removeModifier(MODIFIER);
+        AttributeInstance instance = AttributeAccess.speed(player);
+        if (instance != null) AttributeAccess.removeSpeed(instance);
     }
 
     static boolean supported(Mob member) {
-        if (member instanceof net.minecraft.world.entity.animal.WaterAnimal
+        if (AttributeAccess.aquatic(member)
                 || member.getNavigation() == null || member.getNavigation().getClass() != GroundPathNavigation.class
                 || member.getMoveControl() == null || member.getMoveControl().getClass() != MoveControl.class) return false;
         try {
@@ -93,10 +78,10 @@ public final class PlayerSpeed {
         return Math.abs(current - mean) < EPSILON;
     }
 
-    private static void migrate(Player player, List<Map<ResourceLocation, Double>> origins) {
-        AttributeInstance instance = player.getAttribute(Attributes.MOVEMENT_SPEED);
+    private static void migrate(Player player, List<Map<String, Double>> origins) {
+        AttributeInstance instance = AttributeAccess.speed(player);
         if (instance == null || origins.isEmpty()) return;
-        Double own = origins.getLast().get(ATTRIBUTE);
+        Double own = origins.get(origins.size() - 1).get(ATTRIBUTE);
         Double mean = AttributeAverages.mean(origins).get(ATTRIBUTE);
         if (own == null || mean == null) return;
         double current = instance.getBaseValue();

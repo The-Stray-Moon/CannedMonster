@@ -4,7 +4,7 @@ import cc.sighs.cannedmonster.fusion.FusionNetwork;
 import cc.sighs.cannedmonster.fusion.FusionPursuit;
 import cc.sighs.cannedmonster.fusion.FusionRuntime;
 import cc.sighs.cannedmonster.fusion.PlayerFusion;
-import cc.sighs.cannedmonster.fusion.RidingState;
+import cc.sighs.cannedmonster.fusion.RidingSync;
 import cc.sighs.cannedmonster.fusion.visual.AppearanceSync;
 import com.mojang.brigadier.exceptions.DynamicCommandExceptionType;
 import net.minecraft.commands.Commands;
@@ -61,24 +61,24 @@ public final class CannedMonsterForge {
     private void levelTick(TickEvent.LevelTickEvent event) {
         if (event.phase != TickEvent.Phase.END || !(event.level instanceof ServerLevel level)) return;
         for (Entity entity : level.getAllEntities()) {
-            RidingState.tick(entity);
+            RidingSync.tick(entity);
             AppearanceSync.tick(entity);
             FusionPursuit.tick(entity);
         }
     }
 
     private void clone(PlayerEvent.Clone event) {
-        PlayerFusion.clone(event);
+        PlayerFusion.copy(event.getOriginal(), event.getEntity());
     }
 
     private void dimension(PlayerEvent.PlayerChangedDimensionEvent event) {
-        PlayerFusion.dimension(event);
+        PlayerFusion.dimension(event.getEntity());
     }
 
     private void tracking(PlayerEvent.StartTracking event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         AppearanceSync.tracking(event.getTarget(), player);
-        RidingState.tracking(event.getTarget(), player);
+        RidingSync.tracking(event.getTarget(), player);
     }
 
     private void leave(EntityLeaveLevelEvent event) {
@@ -87,14 +87,14 @@ public final class CannedMonsterForge {
             FusionRuntime.detach(mob);
         }
         AppearanceSync.leave(event.getEntity());
-        RidingState.leave(event.getEntity());
+        RidingSync.leave(event.getEntity());
         if (event.getLevel().isClientSide) cc.sighs.cannedmonster.fusion.visual.ClientRiding.leave(event.getEntity());
     }
 
     private void stop(ServerStoppedEvent event) {
         FusionRuntime.clear();
         AppearanceSync.stop();
-        RidingState.clear();
+        RidingSync.clear();
     }
 
     private void canInteraction(PlayerInteractEvent.EntityInteract event) {

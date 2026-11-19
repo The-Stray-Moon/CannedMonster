@@ -8,7 +8,6 @@ import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.navigation.PathNavigation;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.event.tick.EntityTickEvent;
 
 import javax.annotation.Nullable;
 
@@ -36,7 +35,7 @@ public final class FusionPursuit {
         if (motion == null || !(BodyLinks.body(mob) instanceof Mob body) || !body.isAlive() || body.isRemoved()) {
             return;
         }
-        if (body.level().isClientSide || body.level() != target.level() || body.getControllingPassenger() != null) {
+        if (body.level().isClientSide() || body.level() != target.level() || body.getControllingPassenger() != null) {
             return;
         }
         Mob caller = BodyLinks.isFacet(mob) ? mob : motion.caller();
@@ -48,8 +47,8 @@ public final class FusionPursuit {
         pursuit.timing.refresh(body.tickCount, body.distanceTo(target), same);
     }
 
-    public static void tick(EntityTickEvent.Post event) {
-        if (!(event.getEntity() instanceof Mob body) || body.level().isClientSide || BodyLinks.body(body) != body) {
+    public static void tick(Entity entity) {
+        if (!(entity instanceof Mob body) || body.level().isClientSide() || BodyLinks.body(body) != body) {
             return;
         }
         FusionMotion motion = FusionMotion.of(body);
@@ -137,7 +136,7 @@ public final class FusionPursuit {
         Vec3 direction = delta.scale(1.0 / distance);
         Vec3 velocity = new Vec3(direction.x * speed, direction.y * speed * 0.6, direction.z * speed);
         body.setDeltaMovement(velocity);
-        body.hasImpulse = true;
+        cc.sighs.cannedmonster.platform.EntityAccess.markMotion(body);
         body.move(MoverType.SELF, velocity);
         float yaw = (float) (Mth.atan2(direction.z, direction.x) * (180.0 / Math.PI)) - 90.0F;
         body.setYRot(yaw);

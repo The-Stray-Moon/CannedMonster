@@ -24,6 +24,6 @@ public abstract class FusionPhysiologyMixin {
     public boolean canDrownInFluidType(FluidType type) {
         LivingEntity entity = (LivingEntity) (Object) this;
         boolean original = type == NeoForgeMod.WATER_TYPE.value() ? !entity.canBreatheUnderwater() : type.canDrownIn(entity);
-        return FusionTraits.canDrown(entity, type, original);
+        return FusionTraits.canDrown(entity, member -> member.canDrownInFluidType(type), original);
     }
 }

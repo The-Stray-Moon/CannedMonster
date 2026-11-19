@@ -31,22 +31,8 @@ sourceSets {
     }
 }
 
-commonJava {
-    // Files whose 1.21.1 implementation is confirmed incompatible with 1.20.1.
-    exclude 'cc/sighs/cannedmonster/can/CanActions.java'
-    exclude 'cc/sighs/cannedmonster/can/CanContents.java'
-    exclude 'cc/sighs/cannedmonster/can/MonsterCanItem.java'
-    exclude 'cc/sighs/cannedmonster/fusion/AttributeAverages.java'
-    exclude 'cc/sighs/cannedmonster/fusion/FusionPursuit.java'
-    exclude 'cc/sighs/cannedmonster/fusion/FusionTraits.java'
-    exclude 'cc/sighs/cannedmonster/fusion/NativeAttributeAccess.java'
-    exclude 'cc/sighs/cannedmonster/fusion/PlayerFusion.java'
-    exclude 'cc/sighs/cannedmonster/fusion/PlayerSpeed.java'
-    exclude 'cc/sighs/cannedmonster/fusion/RidingState.java'
-    exclude 'cc/sighs/cannedmonster/fusion/visual/AppearanceSync.java'
-    exclude 'cc/sighs/cannedmonster/fusion/visual/FusionAppearance.java'
-    exclude 'cc/sighs/cannedmonster/fusion/visual/MemberEvent.java'
-    exclude 'cc/sighs/cannedmonster/fusion/visual/SliceBuffers.java'
+platformJava {
+    srcDir '../../common/src/legacy/java'
 }
 
 mixin {

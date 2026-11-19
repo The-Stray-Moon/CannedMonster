@@ -10,8 +10,8 @@ java {
     toolchain.languageVersion = JavaLanguageVersion.of(21)
 }
 
-commonJava {
-    // Exclude only common files with confirmed differences for this target.
+platformJava {
+    srcDirs '../../common/src/legacy/java', '../../common/src/modern/java'
 }
 
 sourceSets {

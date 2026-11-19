@@ -1,11 +1,4 @@
-// Standalone build for the shared source tree.
-//
-// common/ holds the primary NeoForge 1.21.1 implementation. Files with a
-// confirmed 1.20.1 difference are excluded by that target's commonJava block
-// and replaced in targets/forge-1.20.1. This standalone build checks the
-// shared tree against the primary target's NeoForge classpath:
-//
-//     gradlew -p common build
+// Standalone shared-core checks use the primary target's API backends and NeoForge classpath.
 plugins {
     id 'java-library'
     id 'net.neoforged.moddev' version '2.0.141'
@@ -15,6 +8,11 @@ def properties = new Properties()
 file('../gradle.properties').withInputStream { properties.load(it) }
 file('gradle.properties').withInputStream { properties.load(it) }
 properties.each { key, value -> ext.set(key.toString(), value.toString()) }
+
+sourceSets.main.java.srcDirs 'src/legacy/java', 'src/modern/java',
+        '../targets/neoforge-1.21.1/src/main/java/cc/sighs/cannedmonster/platform',
+        '../targets/neoforge-1.21.1/src/main/java/cc/sighs/cannedmonster/can',
+        '../targets/neoforge-1.21.1/src/main/java/cc/sighs/cannedmonster/fusion'
 
 group = mod_group_id
 version = mod_version

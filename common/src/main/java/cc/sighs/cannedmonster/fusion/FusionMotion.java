@@ -53,7 +53,7 @@ public final class FusionMotion {
     }
 
     public static LivingEntity controllingPassenger(LivingEntity original, Entity entity) {
-        if (entity instanceof Mob body && body.level().isClientSide && clientFusion(body)) {
+        if (entity instanceof Mob body && cc.sighs.cannedmonster.platform.EntityAccess.clientSide(body.level()) && clientFusion(body)) {
             int id = clientView.controller(body);
             for (Entity passenger : body.getPassengers()) {
                 if (passenger.getId() == id && passenger instanceof LivingEntity living) return living;

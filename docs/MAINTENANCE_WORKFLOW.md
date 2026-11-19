@@ -38,9 +38,9 @@
 
 - 以运行时 loader/version 判断、反射分发或同名 class 覆盖来伪装兼容不同 target。
 - 某个 target 专属的资源路径。
-- 为掩盖某个 target 的编译错误而加入的抽象泄漏；正确做法是在该 target 的 `commonJava` 中 `exclude` 对应文件。
+- 为掩盖某个 target 的编译错误而复制整个业务类，或让版本标识类型扩散到业务状态中。
 
-版本差异通过 target 的 `commonJava` `exclude` 登记：某个 common 文件在该 target 上有确证差异时，在该 target 的 `commonJava` 里 `exclude '<路径>'`，并把该 target 自己的实现放进 target。
+三个已迁移目标完整编译 `common/src/main/java`，不再通过 `commonJava exclude` 替换业务文件。确证差异后，只抽离注册表、原生调用、序列化或渲染提交操作，保留唯一业务流程。target 的 `platform` 提供静态编译期适配；`platformJava` 显式接入 `common/src/legacy/java`（1.20.1/1.21.1 的旧投掷基类、战利品接口、渲染入口）和 `common/src/modern/java`（1.21.1/26.1 的 Holder 属性接口）等兼容 API 胶水。它们是源码目录，不是额外模块或 common jar。`verifySharedSources` 在编译前拒绝公共核心过滤和重复类归属。
 
 ### target
 
@@ -59,7 +59,7 @@
 
 `runClient` / `runServer` 的前置任务 `prepareAsmRun` 管理 run/mods 下的 `cannedmonster-asm-dev.jar` 与 `cannedmonster-packaged.jar`，根据 `-PverifyPackagedMod` 互斥安装；其他 mods 文件不自动清理。成品模式禁用源码模组，并从 `RunGameTask.classpathProvider` 排除开发输出。启动参数不需要 Java Agent。构建后检查外层服务注册、内层 metadata/资源以及两层无重复游戏包，再分别验证开发入口和成品入口；启动成功不能代替融合行为验证。
 
-Forge 1.20.1 使用 `net.neoforged.moddev.legacyforge`、JDK 17 toolchain 和 SRG 运行时。Mixin 由 MDG 的 `mixin` 扩展生成 refmap（必须有 `annotationProcessor`），ASM 服务通过 ModLauncher `ITransformationService` 接入；扫描与调度必须兼容 1.20.1 SRG 名称。发布/成品验证是两个文件：普通游戏 jar 和 `cannedmonster-bootstrap.jar`。单 jar 会被 ModLauncher 排除出普通模组发现，导致 Mixin 配置在早期不可读。`prepareAsmRun` 在开发运行只放 bootstrap jar，`-PverifyPackagedMod` 同时放游戏 jar 与 bootstrap jar。集成服客户端已验证；专用服务器、投掷/随机/战利品/派生/骑乘/传送等完整矩阵仍未完成。`common` 独立构建以 NeoForge 1.21.1 为主类路径，Forge 1.20.1 的差异由 target 排除和替换实现覆盖。
+Forge 1.20.1 使用 `net.neoforged.moddev.legacyforge`、JDK 17 toolchain 和 SRG 运行时。Mixin 由 MDG 的 `mixin` 扩展生成 refmap（必须有 `annotationProcessor`），ASM 服务通过 ModLauncher `ITransformationService` 接入；扫描与调度必须兼容 1.20.1 SRG 名称。发布/成品验证是两个文件：普通游戏 jar 和 `cannedmonster-bootstrap.jar`。单 jar 会被 ModLauncher 排除出普通模组发现，导致 Mixin 配置在早期不可读。`prepareAsmRun` 在开发运行只放 bootstrap jar，`-PverifyPackagedMod` 同时放游戏 jar 与 bootstrap jar。集成服客户端已验证；专用服务器、投掷/随机/战利品/派生/骑乘/传送等完整矩阵仍未完成。`common` 独立构建以 NeoForge 1.21.1 为主类路径，Forge 1.20.1 的差异由编译期平台适配和显式 API 胶水源码集处理，业务核心不排除。
 
 启动索引必须跳过模块描述文件，按 manifest 和当前 JVM 解析 multi-release 类，未知父类或空父类不能导致扫描崩溃。方法体注入必须排除 abstract/native/无 Code 声明；native 内部行为不属于支持范围。调度句柄从公共基类契约取得，不能要求模组实体实现类为 public，也不能把玩家精确调用退回 ServerPlayer 虚调用。相关回归位于 `BootstrapTest`、`BodyTransformerTest`、`NativeCallHandlesTest` 与 `bootstrap/native-calls.js`。
 
@@ -150,11 +150,11 @@ docs: clarify release matrix
 5. docs/tests: 更新支持矩阵与验证记录
 ```
 
-不能为“统一代码”而掩盖确证差异，也不能仅因为某段代码用了 `ItemStack`、`PoseStack`、`Holder`、`StreamCodec`、Fabric callback 或 Forge/NeoForge event 就拒绝把它放进 `common`；确证有差异的部分放进对应 target 并在其 `commonJava` 中 `exclude`。
+不能为“统一代码”而掩盖确证差异，也不能仅因为某段代码用了 `ItemStack`、`PoseStack`、`Holder`、`StreamCodec`、Fabric callback 或 Forge/NeoForge event 就拒绝把它放进 `common`；确证有差异的操作放进对应 target 后端，公共业务与状态不得整类复制或排除。
 
 ## 渲染与客户端变化
 
-渲染实现遵循根 AGENTS.md 的实际 API 差异规则：没有确证版本差异的实现放 `common`，平台注册与 Mixin 配置留在 target；不能只因为引用客户端/loader 类型就另建适配层。确证 buffer、shader、model 或事件时机差异后，再在目标通过 `commonJava` 排除共享文件并提供替代实现。
+渲染实现遵循根 AGENTS.md 的实际 API 差异规则：没有确证版本差异的实现放 `common`，平台注册与 Mixin 配置留在 target；不能只因为引用客户端/loader 类型就另建适配层。确证 buffer、shader、model 或事件时机差异后，只将提交后端放入 target 或显式版本族源码集，几何裁剪与显示状态继续共用。
 
 当前 NeoForge 1.21.1 的融合切片位于 `common/.../fusion/visual`，target 接入网络注册、客户端 tick 与渲染 Mixin。共享源码位置不代表其他 target 已兼容。客户端显示/渲染类只能在客户端执行路径加载，服务端同步不创建显示实例。
 
@@ -231,7 +231,7 @@ targets/**/ci.properties
 
 评审者检查：
 
-- 是否依据源码确证（而非猜测）来划分 `common` 与 target；确证有差异的文件应在对应 target 的 `commonJava` 中 `exclude`。
+- 是否依据源码确证来提炼窄后端，公共核心是否完整参与编译；禁止用 `commonJava exclude` 和同名业务副本绕过差异。
 - 是否把 1.20.1、1.21.1、26.1 的资源、Mixin 或客户端代码混入同一 target。
 - 是否更新了所有受影响的桥接实现。
 - 是否因工具链不兼容而错误使用根聚合替代独立构建。

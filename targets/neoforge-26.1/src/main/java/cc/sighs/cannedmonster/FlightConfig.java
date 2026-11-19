@@ -33,6 +33,6 @@ public final class FlightConfig {
             Identifier id = Identifier.tryParse(value);
             if (id != null) ids.add(id);
         }
-        FlightRules.setExtraTypes(ids);
+        FlightRules.setExtraTypes(ids.stream().map(Object::toString).toList());
     }
 }

@@ -33,8 +33,9 @@ class NativeCallHandlesTest {
                 synchronized (getClassLoadingLock(name)) {
                     String internal = name.replace('.', '/');
                     byte[] bytes = classes.get(internal);
-                    if (bytes == null && name.startsWith("cc.sighs.cannedmonster.fusion.")
-                            && (name.contains("OrderedCalls") || name.contains("HurtCalls"))) {
+                    if (bytes == null && (name.equals("cc.sighs.cannedmonster.platform.NativeHurt")
+                            || name.startsWith("cc.sighs.cannedmonster.fusion.")
+                            && (name.contains("OrderedCalls") || name.contains("HurtCalls")))) {
                         try (var input = getParent().getResourceAsStream(internal + ".class")) {
                             if (input != null) bytes = input.readAllBytes();
                         } catch (java.io.IOException failure) {
@@ -61,7 +62,7 @@ class NativeCallHandlesTest {
         lifecycle.get("tick").invoke(member);
         lifecycle.get("aiStep").invoke(member);
         MethodHandle hurt = (MethodHandle) handles(loader, "HurtCalls").get(hidden);
-        assertTrue((boolean) hurt.invoke(member, null, 1.0F));
+        assertTrue((boolean) hurt.invoke(member, null, null, 1.0F));
         assertEquals(6, loader.loadClass(LIVING.replace('/', '.')).getField("calls").getInt(member));
         Class<?> hiddenPlayer = loader.loadClass("example.HiddenPlayer");
         var playerConstructor = hiddenPlayer.getDeclaredConstructor();
@@ -71,7 +72,7 @@ class NativeCallHandlesTest {
         Map<String, MethodHandle> playerLifecycle = (Map<String, MethodHandle>) ordered.get(hiddenPlayer);
         playerLifecycle.get("tick").invoke(player);
         playerLifecycle.get("aiStep").invoke(player);
-        assertTrue((boolean) ((MethodHandle) handles(loader, "HurtCalls").get(hiddenPlayer)).invoke(player, null, 1.0F));
+        assertTrue((boolean) ((MethodHandle) handles(loader, "HurtCalls").get(hiddenPlayer)).invoke(player, null, null, 1.0F));
         assertEquals(9, loader.loadClass(LIVING.replace('/', '.')).getField("calls").getInt(player));
     }
 

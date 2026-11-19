@@ -22,17 +22,17 @@ class CanEatingFlowTest {
     void playerFusionOnlyCommitsFromMealCompletionNotRelease() throws IOException {
         ClassNode item = item();
         assertTrue(calls(method(item, "finishUsingItem"), "PlayerFusion", "fuse"));
-        assertFalse(calls(method(item, "releaseUsing"), "PlayerFusion", "fuse"));
+        assertFalse(calls(method(item, "release"), "PlayerFusion", "fuse"));
         assertFalse(calls(method(item, "finishUsingItem"), "CanContents", "clear"));
-        assertFalse(calls(method(item, "releaseUsing"), "CanContents", "clear"));
+        assertFalse(calls(method(item, "release"), "CanContents", "clear"));
     }
 
     @Test
     void extractionRemainsSeparateFromMealCompletion() throws IOException {
         ClassNode item = item();
-        assertTrue(calls(method(item, "releaseUsing"), "PlayerFusion", "extract"));
+        assertTrue(calls(method(item, "release"), "PlayerFusion", "extract"));
         assertFalse(calls(method(item, "finishUsingItem"), "PlayerFusion", "extract"));
-        assertTrue(calls(method(item, "finishUsingItem"), "MonsterCanItem", "takePress"));
+        assertTrue(calls(method(item, "finishUsingItem"), "BaseCanItem", "takePress"));
     }
 
     private static boolean calls(MethodNode method, String owner, String name) {
@@ -48,7 +48,7 @@ class CanEatingFlowTest {
 
     private static ClassNode item() throws IOException {
         try (var input = CanEatingFlowTest.class.getClassLoader()
-                .getResourceAsStream("cc/sighs/cannedmonster/can/MonsterCanItem.class")) {
+                .getResourceAsStream("cc/sighs/cannedmonster/can/BaseCanItem.class")) {
             assertNotNull(input);
             ClassNode node = new ClassNode();
             new ClassReader(input).accept(node, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);

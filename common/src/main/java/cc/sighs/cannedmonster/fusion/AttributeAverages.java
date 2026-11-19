@@ -1,29 +1,32 @@
 package cc.sighs.cannedmonster.fusion;
 
-import net.minecraft.core.registries.BuiltInRegistries;
+import cc.sighs.cannedmonster.platform.AttributeAccess;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 
+import java.lang.ref.WeakReference;
 import java.util.*;
 
 public final class AttributeAverages {
-    private static final Map<LivingEntity, Set<net.minecraft.core.Holder<net.minecraft.world.entity.ai.attributes.Attribute>>> ADDED = new WeakHashMap<>();
-    private static final Map<AttributeInstance, java.lang.ref.WeakReference<LivingEntity>> OWNERS = Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<LivingEntity, Set<String>> ADDED = new WeakHashMap<>();
+    private static final Map<AttributeInstance, WeakReference<LivingEntity>> OWNERS = Collections.synchronizedMap(new WeakHashMap<>());
     private static final ThreadLocal<Boolean> APPLYING = ThreadLocal.withInitial(() -> false);
+
+    private AttributeAverages() {}
 
     public static void baseChanged(AttributeInstance instance) {
         if (APPLYING.get()) return;
         var reference = OWNERS.get(instance);
         LivingEntity owner = reference == null ? null : reference.get();
-        if (owner == null || owner.level().isClientSide || OrderedCalls.currentMember() instanceof net.minecraft.world.entity.Mob
-                || HurtCalls.currentMember() instanceof net.minecraft.world.entity.Mob) return;
-        FusionRuntime.baseChanged(owner, instance.getAttribute().unwrapKey().orElseThrow().location(), instance.getBaseValue());
+        if (owner == null || owner.level().isClientSide() || OrderedCalls.currentMember() instanceof Mob
+                || HurtCalls.currentMember() instanceof Mob) return;
+        FusionRuntime.baseChanged(owner, AttributeAccess.id(instance), instance.getBaseValue());
     }
 
-    public record State(Map<ResourceLocation, Double> bases, float health) {
+    public record State(Map<String, Double> bases, float health) {
         public void restore(LivingEntity body) {
             apply(body, List.of(bases));
             body.setHealth(Math.min(health, body.getMaxHealth()));
@@ -34,16 +37,11 @@ public final class AttributeAverages {
         return new State(capture(body), body.getHealth());
     }
 
-    private AttributeAverages() {}
-
-    public static Map<ResourceLocation, Double> capture(LivingEntity member) {
-        Map<ResourceLocation, Double> values = new LinkedHashMap<>();
-        BuiltInRegistries.ATTRIBUTE.holders().forEach(attribute -> {
-            if (member.getAttributes().hasAttribute(attribute)) {
-                values.put(attribute.key().location(), member.getAttributeBaseValue(attribute));
-                AttributeInstance instance = member.getAttribute(attribute);
-                if (instance != null) OWNERS.put(instance, new java.lang.ref.WeakReference<>(member));
-            }
+    public static Map<String, Double> capture(LivingEntity member) {
+        Map<String, Double> values = new LinkedHashMap<>();
+        AttributeAccess.each(member, instance -> {
+            values.put(AttributeAccess.id(instance), instance.getBaseValue());
+            OWNERS.put(instance, new WeakReference<>(member));
         });
         return Map.copyOf(values);
     }
@@ -62,55 +60,37 @@ public final class AttributeAverages {
         return Map.copyOf(averages);
     }
 
-    public static void apply(LivingEntity body, List<Map<ResourceLocation, Double>> members) {
+    public static void apply(LivingEntity body, List<Map<String, Double>> members) {
         apply(body, members, Set.of());
     }
 
-    public static void apply(LivingEntity body, List<Map<ResourceLocation, Double>> members, Set<ResourceLocation> excluded) {
-        var access = (NativeAttributeAccess) body.getAttributes();
+    public static void apply(LivingEntity body, List<Map<String, Double>> members, Set<String> excluded) {
         var averages = mean(members);
-        averages.keySet().stream().filter(id -> !excluded.contains(id)).forEach(id -> BuiltInRegistries.ATTRIBUTE.getHolder(id)
-                .orElseThrow(() -> new IllegalArgumentException("Missing fusion attribute: " + id)));
+        averages.keySet().stream().filter(id -> !excluded.contains(id)).forEach(AttributeAccess::validate);
         var introduced = ADDED.computeIfAbsent(body, ignored -> new HashSet<>());
-        var ownOrigins = members.getLast();
-        introduced.removeIf(holder -> {
-            var id = holder.unwrapKey().orElseThrow().location();
+        var ownOrigins = members.get(members.size() - 1);
+        introduced.removeIf(id -> {
             if (excluded.contains(id)) return false;
             if (averages.containsKey(id)) return ownOrigins.containsKey(id);
-            access.cannedmonster$instances().remove(holder);
+            AttributeAccess.remove(body, id);
             return true;
         });
         averages.keySet().stream().filter(id -> !excluded.contains(id) && !ownOrigins.containsKey(id))
-                .forEach(id -> introduced.add(BuiltInRegistries.ATTRIBUTE.getHolder(id).orElseThrow()));
-        boolean previous = APPLYING.get();
-        APPLYING.set(true);
-        try {
-            averages.forEach((id, value) -> {
-                if (excluded.contains(id)) return;
-                var holder = BuiltInRegistries.ATTRIBUTE.getHolder(id).orElseThrow();
-                AttributeInstance instance = body.getAttribute(holder);
-                if (instance == null) {
-                    instance = new AttributeInstance(holder, access::cannedmonster$modified);
-                    access.cannedmonster$instances().put(holder, instance);
-                    introduced.add(holder);
-                }
-                OWNERS.put(instance, new java.lang.ref.WeakReference<>(body));
-                instance.setBaseValue(value);
-                access.cannedmonster$modified(instance);
-            });
-        } finally {
-            if (previous) APPLYING.set(true);
-            else APPLYING.remove();
-        }
+                .forEach(introduced::add);
+        quiet(() -> averages.forEach((id, value) -> {
+            if (excluded.contains(id)) return;
+            if (!AttributeAccess.has(body, id)) introduced.add(id);
+            AttributeInstance instance = AttributeAccess.ensure(body, id);
+            OWNERS.put(instance, new WeakReference<>(body));
+            instance.setBaseValue(value);
+            AttributeAccess.modified(body, instance);
+        }));
         if (introduced.isEmpty()) ADDED.remove(body);
         if (body.getHealth() > body.getMaxHealth()) body.setHealth(body.getMaxHealth());
     }
 
     public static void track(LivingEntity body) {
-        BuiltInRegistries.ATTRIBUTE.holders().forEach(holder -> {
-            AttributeInstance instance = body.getAttribute(holder);
-            if (instance != null) OWNERS.put(instance, new java.lang.ref.WeakReference<>(body));
-        });
+        AttributeAccess.each(body, instance -> OWNERS.put(instance, new WeakReference<>(body)));
     }
 
     public static void quiet(Runnable action) {
@@ -124,23 +104,25 @@ public final class AttributeAverages {
         }
     }
 
-    public static ListTag save(List<Map<ResourceLocation, Double>> members) {
+    public static ListTag save(List<Map<String, Double>> members) {
         ListTag list = new ListTag();
-        for (Map<ResourceLocation, Double> member : members) {
+        for (Map<String, Double> member : members) {
             CompoundTag tag = new CompoundTag();
-            member.forEach((key, value) -> tag.putDouble(key.toString(), value));
+            member.forEach(tag::putDouble);
             list.add(tag);
         }
         return list;
     }
 
-    public static List<Map<ResourceLocation, Double>> load(ListTag list, int expected) {
+    public static List<Map<String, Double>> load(ListTag list, int expected) {
         if (list.size() != expected) throw new IllegalArgumentException("Fusion attribute member count mismatch");
-        List<Map<ResourceLocation, Double>> members = new ArrayList<>();
+        List<Map<String, Double>> members = new ArrayList<>();
         for (int i = 0; i < list.size(); i++) {
-            CompoundTag tag = list.getCompound(i);
-            Map<ResourceLocation, Double> values = new LinkedHashMap<>();
-            for (String key : tag.getAllKeys()) values.put(ResourceLocation.parse(key), tag.getDouble(key));
+            CompoundTag tag = cc.sighs.cannedmonster.platform.TagAccess.compound(list, i);
+            Map<String, Double> values = new LinkedHashMap<>();
+            for (String key : cc.sighs.cannedmonster.platform.TagAccess.keys(tag)) {
+                values.put(AttributeAccess.normalize(key), cc.sighs.cannedmonster.platform.TagAccess.number(tag, key));
+            }
             members.add(Map.copyOf(values));
         }
         mean(members);

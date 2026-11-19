@@ -18,9 +18,13 @@ def commonJava = objects.sourceDirectorySet('commonJava', 'Shared Java sources')
 commonJava.srcDir file('../../common/src/main/java')
 extensions.add('commonJava', commonJava)
 
+def platformJava = objects.sourceDirectorySet('platformJava', 'Version API backends')
+extensions.add('platformJava', platformJava)
+
 sourceSets {
     main {
         java.source commonJava
+        java.source platformJava
         resources.srcDir '../../common/src/main/resources'
     }
     test {
@@ -45,6 +49,28 @@ dependencies {
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
+
+def verifySharedSources = tasks.register('verifySharedSources') {
+    inputs.files sourceSets.main.allJava
+    doLast {
+        if (!platformJava.srcDirs.isEmpty() && (!commonJava.excludes.isEmpty() || !commonJava.includes.isEmpty())) {
+            throw new GradleException('Version backends must compile the entire shared core; commonJava filters are not allowed.')
+        }
+        def owners = [:]
+        sourceSets.main.allJava.files.each { source ->
+            def declaration = source.getText('UTF-8') =~ /(?m)^package\s+([\w.]+)\s*;/
+            if (declaration.find()) {
+                def name = declaration.group(1) + '.' + source.name
+                def previous = owners.put(name, source)
+                if (previous != null && previous != source) {
+                    throw new GradleException("Duplicate Java source ownership for ${name}: ${previous}, ${source}")
+                }
+            }
+        }
+    }
+}
+
+tasks.named('compileJava').configure { dependsOn verifySharedSources }
 
 tasks.named('test', Test).configure {
     useJUnitPlatform()

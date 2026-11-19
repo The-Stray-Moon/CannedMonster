@@ -1,10 +1,12 @@
 package cc.sighs.cannedmonster.can;
 
-import net.minecraft.core.component.DataComponents;
+import cc.sighs.cannedmonster.fusion.FusionRuntime;
+import cc.sighs.cannedmonster.platform.TagAccess;
+import cc.sighs.cannedmonster.platform.CanStorage;
+import cc.sighs.cannedmonster.platform.EntityStorage;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.component.CustomData;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -14,27 +16,24 @@ public final class CanContents {
     public static final String KEY = "cannedmonster:contents";
     public static final int MAX_BYTES = 262144;
 
-    private CanContents() {
-    }
+    private CanContents() {}
 
     public static boolean filled(ItemStack stack) {
-        return stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).contains(KEY);
+        return CanStorage.filled(stack);
     }
 
     public static CompoundTag entity(ItemStack stack) {
-        return stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag().getCompound(KEY).getCompound("Entity").copy();
+        return EntityStorage.compound(CanStorage.read(stack), "Entity").copy();
     }
 
     public static String name(ItemStack stack) {
-        return stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag().getCompound(KEY).getString("Name");
+        return EntityStorage.string(CanStorage.read(stack), "Name");
     }
 
     public static int count(ItemStack stack) {
-        CompoundTag contents = stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag().getCompound(KEY);
-        if (contents.contains("Count")) return Math.max(1, contents.getInt("Count"));
-        CompoundTag fusion = contents.getCompound("Entity").getCompound("cannedmonster:fusion");
-        return 1 + (fusion.contains("Members", net.minecraft.nbt.Tag.TAG_LIST)
-                ? fusion.getList("Members", net.minecraft.nbt.Tag.TAG_COMPOUND).size() : 0);
+        CompoundTag contents = CanStorage.read(stack);
+        if (contents.contains("Count")) return Math.max(1, EntityStorage.integer(contents, "Count"));
+        return FusionRuntime.memberCount(EntityStorage.compound(contents, "Entity"));
     }
 
     public static void store(ItemStack stack, CompoundTag entity, String name) {
@@ -42,6 +41,10 @@ public final class CanContents {
     }
 
     public static void store(ItemStack stack, CompoundTag entity, String name, int count) {
+        write(stack, build(entity, name, count));
+    }
+
+    public static CompoundTag build(CompoundTag entity, String name, int count) {
         CompoundTag contents = new CompoundTag();
         contents.putInt("Version", 1);
         contents.put("Entity", entity.copy());
@@ -55,20 +58,24 @@ public final class CanContents {
         } catch (IOException exception) {
             throw new IllegalArgumentException("Cannot serialize can contents", exception);
         }
-        CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> tag.put(KEY, contents));
+        return contents;
+    }
+
+    public static void write(ItemStack stack, CompoundTag contents) {
+        CanStorage.write(stack, contents);
     }
 
     static void validate(net.minecraft.nbt.Tag tag, int depth) {
         if (depth > 64 || tag.sizeInBytes() > MAX_BYTES) throw new IllegalArgumentException("Entity data exceeds can capacity");
         if (tag instanceof CompoundTag compound) {
-            for (String key : compound.getAllKeys()) {
+            for (String key : TagAccess.keys(compound)) {
                 validateText(key);
                 validate(compound.get(key), depth + 1);
             }
         } else if (tag instanceof net.minecraft.nbt.ListTag list) {
             for (net.minecraft.nbt.Tag child : list) validate(child, depth + 1);
         } else if (tag instanceof net.minecraft.nbt.StringTag string) {
-            validateText(string.getAsString());
+            validateText(CanStorage.text(string));
         }
     }
 
@@ -82,11 +89,11 @@ public final class CanContents {
     }
 
     public static void clear(ItemStack stack) {
-        CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> tag.remove(KEY));
+        CanStorage.clear(stack);
     }
 
     public static boolean valid(ItemStack stack) {
-        CompoundTag contents = stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag().getCompound(KEY);
-        return contents.getInt("Version") == 1 && contents.getCompound("Entity").contains("id", 8);
+        CompoundTag contents = CanStorage.read(stack);
+        return EntityStorage.integer(contents, "Version") == 1 && CanStorage.hasId(EntityStorage.compound(contents, "Entity"));
     }
 }

@@ -40,16 +40,28 @@ public final class CannedMonsterNeoForge261 {
                 event.registrar("3").playToClient(cc.sighs.cannedmonster.fusion.visual.MemberEvent.TYPE,
                         cc.sighs.cannedmonster.fusion.visual.MemberEvent.CODEC,
                         (packet, context) -> cc.sighs.cannedmonster.fusion.visual.ClientAppearance.receive(packet)));
-        NeoForge.EVENT_BUS.addListener(cc.sighs.cannedmonster.fusion.RidingState::tick);
-        NeoForge.EVENT_BUS.addListener(cc.sighs.cannedmonster.fusion.FusionPursuit::tick);
-        NeoForge.EVENT_BUS.addListener(cc.sighs.cannedmonster.fusion.PlayerFusion::clone);
-        NeoForge.EVENT_BUS.addListener(cc.sighs.cannedmonster.fusion.PlayerFusion::dimension);
-        NeoForge.EVENT_BUS.addListener(cc.sighs.cannedmonster.fusion.RidingState::tracking);
-        NeoForge.EVENT_BUS.addListener(cc.sighs.cannedmonster.fusion.RidingState::leave);
-        NeoForge.EVENT_BUS.addListener(cc.sighs.cannedmonster.fusion.visual.AppearanceSync::tick);
-        NeoForge.EVENT_BUS.addListener(cc.sighs.cannedmonster.fusion.visual.AppearanceSync::tracking);
-        NeoForge.EVENT_BUS.addListener(cc.sighs.cannedmonster.fusion.visual.AppearanceSync::leave);
-        NeoForge.EVENT_BUS.addListener(cc.sighs.cannedmonster.fusion.visual.AppearanceSync::stop);
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.tick.EntityTickEvent.Post event) ->
+                cc.sighs.cannedmonster.fusion.RidingSync.tick(event.getEntity()));
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.tick.EntityTickEvent.Post event) ->
+                cc.sighs.cannedmonster.fusion.FusionPursuit.tick(event.getEntity()));
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.entity.player.PlayerEvent.Clone event) ->
+                cc.sighs.cannedmonster.fusion.PlayerFusion.copy(event.getOriginal(), event.getEntity()));
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerChangedDimensionEvent event) ->
+                cc.sighs.cannedmonster.fusion.PlayerFusion.dimension(event.getEntity()));
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.entity.player.PlayerEvent.StartTracking event) -> {
+            if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)
+                cc.sighs.cannedmonster.fusion.RidingSync.tracking(event.getTarget(), player);
+        });
+        NeoForge.EVENT_BUS.addListener((EntityLeaveLevelEvent event) -> cc.sighs.cannedmonster.fusion.RidingSync.leave(event.getEntity()));
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.tick.EntityTickEvent.Post event) ->
+                cc.sighs.cannedmonster.fusion.visual.AppearanceSync.tick(event.getEntity()));
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.entity.player.PlayerEvent.StartTracking event) -> {
+            if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)
+                cc.sighs.cannedmonster.fusion.visual.AppearanceSync.tracking(event.getTarget(), player);
+        });
+        NeoForge.EVENT_BUS.addListener((EntityLeaveLevelEvent event) ->
+                cc.sighs.cannedmonster.fusion.visual.AppearanceSync.leave(event.getEntity()));
+        NeoForge.EVENT_BUS.addListener((ServerStoppedEvent event) -> cc.sighs.cannedmonster.fusion.visual.AppearanceSync.stop());
         NeoForge.EVENT_BUS.addListener(this::canInteraction);
         FusionRuntime.initialize();
         NeoForge.EVENT_BUS.addListener(this::registerCommands);

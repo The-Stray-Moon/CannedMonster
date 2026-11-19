@@ -73,7 +73,7 @@ public final class ClientAppearance {
             }
             boolean fresh = member == null;
             if (fresh) {
-                if (!(BuiltInRegistries.ENTITY_TYPE.get(state.type()).create(level) instanceof Mob created)) continue;
+                if (!(cc.sighs.cannedmonster.platform.EntityStorage.create(state.type().toString(), level) instanceof Mob created)) continue;
                 created.setUUID(state.id());
                 DisplayExecution.register(created);
                 member = new Member(state.id(), created);

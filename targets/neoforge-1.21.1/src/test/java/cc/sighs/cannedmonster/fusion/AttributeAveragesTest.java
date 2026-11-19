@@ -1,6 +1,5 @@
 package cc.sighs.cannedmonster.fusion;
 
-import net.minecraft.resources.ResourceLocation;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -28,7 +27,7 @@ class AttributeAveragesTest {
 
     @Test
     void persistsOriginsWithoutFlatteningTheirValues() {
-        var id = ResourceLocation.parse("minecraft:generic.max_health");
+        var id = "minecraft:generic.max_health";
         var origins = List.of(Map.of(id, 10.0), Map.of(id, 30.0), Map.of(id, 80.0));
         var restored = AttributeAverages.load(AttributeAverages.save(origins), 3);
         assertEquals(origins, restored);
