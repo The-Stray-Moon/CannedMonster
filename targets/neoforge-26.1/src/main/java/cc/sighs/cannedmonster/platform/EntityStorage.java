@@ -36,6 +36,10 @@ public final class EntityStorage {
         return tag.getStringOr(key, "");
     }
 
+    public static double decimal(CompoundTag tag, String key) {
+        return tag.getDoubleOr(key, 0.0);
+    }
+
     public static CompoundTag save(Mob member) {
         CompoundTag tag;
         try (ProblemReporter.ScopedCollector reporter = new ProblemReporter.ScopedCollector(member.problemPath(), LogUtils.getLogger())) {
@@ -45,6 +49,25 @@ public final class EntityStorage {
         }
         tag.putString("id", BuiltInRegistries.ENTITY_TYPE.getKey(member.getType()).toString());
         return tag;
+    }
+
+    public static CompoundTag save(Entity entity) {
+        CompoundTag tag;
+        try (ProblemReporter.ScopedCollector reporter = new ProblemReporter.ScopedCollector(entity.problemPath(), LogUtils.getLogger())) {
+            TagValueOutput output = TagValueOutput.createWithContext(reporter, entity.registryAccess());
+            entity.saveWithoutId(output);
+            tag = output.buildResult();
+        }
+        tag.putString("id", BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString());
+        return tag;
+    }
+
+    public static void load(Entity entity, CompoundTag tag) {
+        entity.load(TagValueInput.create(new ProblemReporter.Collector(), entity.registryAccess(), tag));
+    }
+
+    public static void position(Entity entity, net.minecraft.world.phys.Vec3 position, float pitch) {
+        entity.snapTo(position.x, position.y, position.z, entity.getYRot(), pitch);
     }
 
     public static Entity create(String rawId, Level level) {

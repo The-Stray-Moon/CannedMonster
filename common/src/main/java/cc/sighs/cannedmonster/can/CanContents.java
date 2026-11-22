@@ -11,6 +11,7 @@ import net.minecraft.world.item.ItemStack;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.util.UUID;
 
 public final class CanContents {
     public static final String KEY = "cannedmonster:contents";
@@ -34,6 +35,36 @@ public final class CanContents {
         CompoundTag contents = CanStorage.read(stack);
         if (contents.contains("Count")) return Math.max(1, EntityStorage.integer(contents, "Count"));
         return FusionRuntime.memberCount(EntityStorage.compound(contents, "Entity"));
+    }
+
+    public static int spaceCount(ItemStack stack) {
+        return Math.max(0, EntityStorage.integer(CanStorage.read(stack), "Count"));
+    }
+
+    public static UUID spaceId(ItemStack stack) {
+        String raw = EntityStorage.string(CanStorage.read(stack), "Space");
+        if (raw.isEmpty()) return null;
+        try {
+            return UUID.fromString(raw);
+        } catch (IllegalArgumentException exception) {
+            return null;
+        }
+    }
+
+    /** Drop a space reference that was never committed (failed entry). */
+    public static void clearSpace(ItemStack stack) {
+        CompoundTag contents = CanStorage.read(stack);
+        if (contents.contains("Entity")) return;
+        CanStorage.clear(stack);
+    }
+
+    public static void storeSpace(ItemStack stack, UUID space, int residents) {
+        CompoundTag contents = new CompoundTag();
+        contents.putInt("Version", 1);
+        contents.putString("Space", space.toString());
+        contents.putInt("Count", Math.max(0, residents));
+        validate(contents, 0);
+        write(stack, contents);
     }
 
     public static void store(ItemStack stack, CompoundTag entity, String name) {

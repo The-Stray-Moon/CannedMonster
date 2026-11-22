@@ -29,10 +29,28 @@ public final class EntityStorage {
         return tag.getString(key);
     }
 
+    public static double decimal(CompoundTag tag, String key) {
+        return tag.getDouble(key);
+    }
+
     public static CompoundTag save(Mob member) {
         CompoundTag tag = member.saveWithoutId(new CompoundTag());
         tag.putString("id", BuiltInRegistries.ENTITY_TYPE.getKey(member.getType()).toString());
         return tag;
+    }
+
+    public static CompoundTag save(Entity entity) {
+        CompoundTag tag = entity.saveWithoutId(new CompoundTag());
+        tag.putString("id", BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString());
+        return tag;
+    }
+
+    public static void load(Entity entity, CompoundTag tag) {
+        entity.load(tag);
+    }
+
+    public static void position(Entity entity, net.minecraft.world.phys.Vec3 position, float pitch) {
+        entity.moveTo(position.x, position.y, position.z, entity.getYRot(), pitch);
     }
 
     public static Entity create(String rawId, Level level) {

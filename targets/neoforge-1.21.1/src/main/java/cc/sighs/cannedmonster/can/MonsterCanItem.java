@@ -23,6 +23,12 @@ public final class MonsterCanItem extends BaseCanItem {
     @Override
     public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
+        if (spatial()) {
+            if (level.isClientSide()) return InteractionResultHolder.success(stack);
+            if (!(player instanceof net.minecraft.server.level.ServerPlayer server)) return InteractionResultHolder.fail(stack);
+            return cc.sighs.cannedmonster.space.SpaceManager.enter(server, stack, hand)
+                    ? InteractionResultHolder.success(stack) : InteractionResultHolder.fail(stack);
+        }
         return beginUse(level, player, hand) ? InteractionResultHolder.consume(stack) : InteractionResultHolder.pass(stack);
     }
 

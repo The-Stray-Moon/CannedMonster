@@ -25,6 +25,7 @@ def packagedRun = providers.gradleProperty('verifyPackagedMod').isPresent()
 sourceSets {
     test {
         // Unit tests that touch Minecraft types need the game artifact at runtime as well.
+        compileClasspath += sourceSets.main.compileClasspath
         runtimeClasspath += sourceSets.main.compileClasspath
     }
 }

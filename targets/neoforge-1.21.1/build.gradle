@@ -59,6 +59,7 @@ def prepareAsmRun = tasks.register('prepareAsmRun') {
         def mods = file('run/mods')
         mods.mkdirs()
         delete new File(mods, packagedRun ? 'cannedmonster-asm-dev.jar' : 'cannedmonster-packaged.jar')
+        delete new File(mods, packagedRun ? 'fusion-asm-dev.jar' : 'cannedmonster-packaged.jar')
         copy {
             from(packagedRun ? tasks.named('jar').get().archiveFile : bootstrapJar.get().archiveFile)
             into mods
@@ -83,11 +84,38 @@ neoForge {
         client {
             client()
             gameDirectory = file('run')
+            if (providers.gradleProperty('spaceTestHooks').isPresent()) {
+                systemProperty 'cannedmonster.spaceTestHooks', 'true'
+            }
+            if (providers.gradleProperty('multiplayer').isPresent()) {
+                programArgument '--quickPlayMultiplayer'
+                programArgument '127.0.0.1:25565'
+            }
+        }
+
+        client2 {
+            client()
+            gameDirectory = file('run-client2')
+            programArgument '--username'
+            programArgument 'Dev2'
+            systemProperty 'autojs.port', '25586'
+            if (providers.gradleProperty('spaceTestHooks').isPresent()) {
+                systemProperty 'cannedmonster.spaceTestHooks', 'true'
+            }
+            if (providers.gradleProperty('multiplayer').isPresent()) {
+                programArgument '--quickPlayMultiplayer'
+                programArgument '127.0.0.1:25565'
+            }
         }
 
         server {
             server()
+            gameDirectory = file('run-server')
             programArgument '--nogui'
+            systemProperty 'autojs.port', '25584'
+            if (providers.gradleProperty('spaceTestHooks').isPresent()) {
+                systemProperty 'cannedmonster.spaceTestHooks', 'true'
+            }
         }
     }
 

@@ -27,4 +27,20 @@
   "message.cannedmonster.player_fused": "已将 %s 个生物融入体内",
   "message.cannedmonster.player_extracted": "已从体内取出：%s",
   "message.cannedmonster.failed": "罐头操作失败，内容已保留"
+,
+  "item.cannedmonster.with_space": "%s（空间居民 %s）",
+  "tooltip.cannedmonster.spatial_empty": "空间型：右键生物收容，右键空气/方块进入",
+  "tooltip.cannedmonster.spatial_ready": "空间已建立，居民 %s 名；右键空气/方块进入",
+  "tooltip.cannedmonster.spatial_use": "客户端会收到独立虚拟房间视图；右键墙面/地板/天花板退出",
+  "message.cannedmonster.space_already": "已经在虚拟空间内",
+  "message.cannedmonster.space_entered": "已进入虚拟空间",
+  "message.cannedmonster.space_exited": "已离开虚拟空间",
+  "message.cannedmonster.space_anchor_failed": "无法留下外部罐头锚点，进入已取消",
+  "message.cannedmonster.space_anchor_lost": "外部罐头锚点丢失，仍留在空间内",
+  "message.cannedmonster.space_teleport_failed": "空间传送失败，进入已回滚",
+  "message.cannedmonster.space_capture_failed": "收容失败，改动已回滚",
+  "message.cannedmonster.space_too_large": "该生物对房间来说太大",
+  "message.cannedmonster.space_captured": "已将 %s 送入虚拟空间",
+  "message.cannedmonster.space_recovered": "已在最后的锚点位置重新生成罐头",
+  "message.cannedmonster.space_anchor_present": "空间锚点仍存在，拒绝救援"
 }

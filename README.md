@@ -28,10 +28,10 @@ NeoForge 1.21.1 仍是主要开发和验证版本，但公共层不再等同于 
 
 ### 本轮重构验证（2026-11-19）
 
-- 构建：`clean build verifyHotDebug` 在 NeoForge 1.21.1、Forge 1.20.1（offline，依赖缓存可用）和 NeoForge 26.1 均通过；测试数依次为 98、38、37，零失败。独立 `./gradlew -p common build` 也通过。`verifySharedSources` 确认三个目标均完整编译公共核心，没有 Java 源码 `exclude`。
+- 构建：`clean build verifyHotDebug` 在 NeoForge 1.21.1、Forge 1.20.1（offline，依赖缓存可用）和 NeoForge 26.1 均通过；当前测试数依次为 102、42、41，零失败。独立 `./gradlew -p common build` 也通过（41 项测试）。`verifySharedSources` 确认三个目标均完整编译公共核心，没有 Java 源码 `exclude`。
 - 成品包：检查了每个最终 jar（1.21.1 的内嵌 `game.jar`），均包含同一套 `BaseCanItem`、`FusionRuntime`、`RidingSync` 和 `FusionLoot`，未由 target 同名业务类覆盖。
 - AutoJS shared-core 探针：Forge 1.20.1 成品客户端加载后，真实融合/剥离算法、成员不入世界、属性均值、实体存档/加载、物种顺序、大型罐捕获/还原及超容量拒绝共 11 项断言通过。后续玩家融合及真实投掷 tick 检查未完成：新建生存世界的玩家死亡导致 `FusionRuntime.attach` 拒绝 dead body；之后短生命周期 Rhino 求值上下文也无法跨调用保存 projectile probe，未把该部分记为通过。
-- 启动阻塞：NeoForge 1.21.1 packaged client 在游戏启动前由 `AppearanceDataAccess` Mixin 报目标不是 interface；NeoForge 26.1 packaged client 在构造期 `FusionRuntime.initialize` 报 binding slots 未安装，AutoJS 虽启动但没有可用 world side。故 1.21.1 与 26.1 的运行行为尚未验证；本轮不宣称三个目标功能兼容回归全部通过。
+- 启动阻塞：NeoForge 1.21.1 packaged client 原有的 `AppearanceDataAccess` Mixin 目标类型错误已改为抽象类 Mixin，成品客户端可到主菜单并进入世界，本轮空间回归即在该成品上运行；NeoForge 26.1 packaged client 仍在构造期 `FusionRuntime.initialize` 报 binding slots 未安装，AutoJS 虽启动但没有可用 world side。故 26.1 的运行行为尚未验证；本轮不宣称三个目标功能兼容回归全部通过。
 
 ## 怪物罐头玩法（NeoForge 1.21.1）
 
@@ -45,7 +45,7 @@ NeoForge 1.21.1 仍是主要开发和验证版本，但公共层不再等同于 
 | 铁大罐头 | large_iron_can | 大型和随机罐头的合成材料 |
 | 怪物大罐头 | large_monster_can | 同手持普通型，可捕捉/储存融合生物；满罐长按右键后松开融入自身，空罐一次性取回体内全部成员 |
 | 投掷型怪物大罐头 | throwable_large_monster_can | 投掷型，可捕捉/储存融合生物；命中玩家可融合/取出，竖直上抛可命中自己 |
-| 空间型怪物罐头 | spatial_monster_can | 仅注册物品与材质，暂无功能、无配方 |
+| 空间型怪物罐头 | spatial_monster_can | NeoForge 1.21.1 最小虚拟房间闭环：服务端内部权威、客户端实际房间视图、原地罐头锚点；无配方 |
 | 随机型怪物罐头 | random_monster_can | 特殊投掷型，不储存生物；击中方块随机生成一个生物，成功后消耗 |
 
 ### 使用与默认规则
@@ -61,6 +61,38 @@ NeoForge 1.21.1 仍是主要开发和验证版本，但公共层不再等同于 
 
 - 大型罐头从玩家一次性取出时会打包全部成员：最后一名成员作为释放后的身体，前面成员按原顺序作为融合成员；内容和数量写入罐头 NBT。有内容的物品名在括号中显示内容：普通罐显示生物名，大型罐显示数量；选中物品时由原版物品名提示显示，不额外绘制 HUD 行，避免文字重叠。大型罐释放位置仍按原有碰撞/生成规则校验。
 - 自身交互：玩家融合后，一次右键只有在方块、实体和手持物品都没有消费动作时，才在 `ServerPlayerGameMode.useItem` 返回处按成员顺序调用成员原生 `mobInteract`，首个消费动作的结果作为本次使用结果。例如融合铁傀儡后手持铁锭右键自身，会按原版规则消耗 1 个铁锭并回复 25 点生命值（成员与玩家共享血量）。成员返回 PASS 时继续尝试下一个成员；旁观者、物品冷却中，或方块/实体/物品已经消费该次动作时不触发。成员交互触发的骑乘必须经过载具入口检查：身体不得把自己或自己的成员当作载具，其他玩家也不能骑乘玩家融合体；例如驯服驴的 `doPlayerRide` 会被拒绝，而不是形成自骑。
+
+### 空间型虚拟空间（NeoForge 1.21.1 最小闭环）
+
+已打通“真实客户端房间视图 + 服务端内部权威碰撞 + 外部罐头锚点 + 持久化”的闭环。实现不使用 End 或任何真实区块建筑，不跨维度传送，也不以 HUD 假装坐标：
+
+- 服务端内部房间位于同维度的局部坐标（锚点 + 32 格整数偏移，无方块写入、无高空保留坐标）；仅加载区块和实体 tick，房间方块/碰撞/流体/方块实体查询由 `SpaceDomain`/`VirtualChunk` 按房间几何回答，真实世界在相同坐标不被修改。多个空间的内部房间按 32 格步进选取不重叠位置（`SpaceManager.internalRoom`）。
+- **锚点对外位置语义**：`SpacePositions` + `SpaceEntityPositionMixin` 在空间帧外把居民的 `position()`/`getX()`/`getY()`/`getZ()` 投影为 `space.lastAnchor`（罐头所在真实位置），空间帧内仍是房间坐标；因此在外部读取时玩家和居民位于罐头处，而不是锚点 + 32 的内部地块。`getBoundingBox()`/`blockPosition()`/`distanceToSqr()` 在空间帧外同样使用锚点语义，房间内部坐标的距离检查使用真实位置。存档 `Pos` 同样写外部锚点（`SpaceEntitySaveMixin`），与本运行时投影一致，而不是单独伪造存档。
+- 外部锚点是真实容器语义：进入时在玩家原位置生成真实 `ItemEntity` 罐头锚点，把服务端玩家移动到内部坐标。`updateCarrier` 每 tick 按玩家物品栏 → 物品实体 → 容器实体（如箱子矿车） → 方块容器（箱子）顺序追踪载体并平移内部房间；锚点丢失时 `exit` 明确拒绝并留在空间内，`/cannedmonster space recover` 在最后外部锚点重新生成罐头后退出，玩家已不在空间内时也可对最近的丢锚空间执行该命令。内部玩家持有罐头不会把房间锚定到内部坐标。
+- 客户端收到客户端坐标的合成房间 chunk（真实 barrier/石英/海晶灯方块数据）和按玩家投影的传送/实体包，因此客户端实际位于房间、实际渲染房间，而不是 HUD 文本。客户端移动包在服务端反向投影；不属于客户端房间的移动包（登录/传送抖动或伪造坐标）会被丢弃，并按连接重新放置到房间。`ServerGamePacketListenerImpl.tick` 每 tick 用真实坐标重置 `firstGood/lastGood`，避免锚点投影把服务端拉出房间。退出或重生/换维度时恢复该坐标的真实 chunk。
+- 外部索引与查询隔离：服务端 `getEntities()` 被包装为过滤视图，空间外的 `getAllEntities`、AABB/类型查询、按 UUID/网络 id 查询不再返回居民；空间帧内只返回同空间实体。实体身份只来自会话 UUID 映射（`spaceOf` 不再按坐标推断），因此两个内部房间重叠时不会混淆身份；重叠区域的声音/粒子按“多于一个空间声明该坐标则丢弃”仲裁。声音/粒子包在空间内外按坐标、锚点或客户端房间投影/丢弃。真实方块写入、域外实体生成和方块破坏动作在空间帧内被拒绝；离开通过右击房间面（真实客户端会发 `ServerboundUseItemOnPacket`）触发，客户端恢复真实 chunk，玩家回到外部锚点。
+- **逐连接视图**：每个空间分配独立且持久化的客户端显示槽位（`clientRoom` 不会与已存在空间共用坐标），房间 chunk、传送、居民添加和声音/粒子都按连接发送；跨空间的实体添加/传送/运动包被丢弃。同一空间内的多个玩家共享该房间，不同空间的玩家视图互不可见。
+- 空间内死亡在 `LivingDeathEvent` 阶段先回到外部锚点（锚点丢失时回到最后锚点），掉落物生成在锚点而不是内部坐标；重生/换维度时恢复真实 chunk，空间与居民保留，玩家不再处于空间内。居民是真实 Mob 实例（融合体可整体进入，成员随 `Entity.load` 恢复）、内部独立 tick；客户端通过投影后的添加包看到居民。居民不写入区块实体数据（`shouldBeSaved` 为 false），只保存在 `cannedmonster_virtual_spaces` SavedData 台账；关服/自动保存时快照写入，重启时按台账重建。台账与玩家存档中的位置语义都是外部锚点。玩家重连/重启后自动回到原空间。
+- **事务回滚**：进入/捕捉在生成被拒绝时恢复手持物、空间 id、房间原点和居民位置；新建空间会移除记录并释放区块 ticket；传送失败回滚房间、物品和映射；`exit`/`joined` 失败时恢复玩家映射并用真实坐标重新放置。
+- **生命周期与身份清理**：只有真实终止（`KILLED`/`DISCARDED`）才从 `RESIDENTS`/`DERIVED` 与台账删除；`UNLOADED_TO_CHUNK`、`UNLOADED_WITH_PLAYER`、`CHANGED_DIMENSION` 保留台账行，居民骑乘玩家下线不会丢。死亡先进入隔离集合，尸体保持隐藏但不写入台账，直到原版真实移除才清除；快照不会因实体暂不可见或已死亡而复活/删除。捕捉拒绝死亡/已移除/重复/骑乘/被拴生物；融合体允许进入空间（`Entity.load` 恢复成员）。
+- **帧失效**：`SpaceDomain.Frame` 记录帧所属实体；玩家离开/死亡时 `SpaceDomain.invalidate(player)` 只失效该玩家自己的帧，同一 tick 内居民继续保留房间隔离。玩家在自身 tick 内被火烧死时掉落仍落在锚点。
+- **ticket 管理**：房间/锚点 ticket 记录位置，移动时释放旧 ticket，空房间释放房间 ticket，退出释放锚点 ticket，停服释放全部，避免无限积累。
+- **锚点持有人校验与救援**：`anchorPlayer` 必须是同维度且仍持有该空间罐头，否则按丢锚处理并拒绝退出。`recover` 在任何有效载体（玩家物品栏/物品实体/容器实体/方块容器）存在时拒绝，绝不生成第二个同 id 罐头；仅零载体时才在最后锚点生成。
+- **派生实体与整体平移**：空间帧内生成的掉落物/经验/箭/幼崽登记为空间身份（`SpaceManager.derive`、`DERIVED`），不写入区块实体数据，按 `{Data, LocalX/Y/Z}` 持久化。`rebaseTo` 同时平移玩家、居民和派生实体，掉落/幼崽不会留在旧房间。
+- **客户端同步**：进入/重同步发送一次实体添加（含数据与装备），之后每 tick 发送客户端空间的移动/旋转/头部包；同空间其他玩家也会被加入并发送 `ClientboundPlayerInfoUpdatePacket`，退出时逐客户端移除但保留在线 PlayerInfo。原版 Move/Teleport/RotateHead 被拦截；**NeoForge `ClientboundBundlePacket` 也会检查内部 AddEntity/Teleport**，避免配对包绕过过滤把居民重建在锚点。`restoreRoom` 按已发送集合发送移除包。声音/粒子在真实 `send` 链上单次判定并精确去重，`PlayerList.broadcast`/`sendParticles` 对房间坐标用真实距离重投递。
+- **外部一致性**：`getBoundingBox`/`blockPosition`/`distanceToSqr` 在空间帧外使用锚点语义，房间内坐标的距离检查使用真实位置。
+- **台账保留与同 id 去重**：加载时无法解析 UUID/维度的记录保存到 `UNPARSED`，每次保存前从磁盘合并未知记录；新建空间前拒绝已被坏记录占用的 id，写台账时按 Id 去重，坏条目不会覆盖其他空间或产生第二份同 id 记录。
+
+已在**发布 jar**（`runClient -PverifyPackagedMod`，`run/mods/cannedmonster-packaged.jar`）上用 AutoJS 验证，并通过完整 JVM 重启：
+
+- `space-audit-regression.js` **78 项**：外部 `position/getX/getBoundingBox/blockPosition` 等于锚点、派生实体登记/隐藏/随锚点移动仍在房间内、真实发送链声音/粒子**精确次数**（发送 3、丢弃 1、粒子 1/1）、真实 `EntityJoinLevelEvent` 取消回滚、六面 `handleUseItemOn` 退出、`UNLOADED_WITH_PLAYER` 后居民台账保留、死亡隔离不入台账且真实移除后清理、玩家自身 tick 火烧死亡掉落全在锚点、`recover` 有效锚点拒绝且无损后只生成一个、坏 UUID id 拒绝重建且台账只一条。
+- `space-restart-check.js` **17 项**：空间/居民/派生实体恢复、外部锚点位置、坏记录与有效 UUID 坏记录各保留一条、`saveEverything` 后 playerdata `Pos` 等于外部锚点。
+- `space-client-check.js` **9 项**：客户端位于合成房间、墙体/地板/内部空气、居民可见、名称/移动同步。`space-client-ghost-check.js` **2 项**：退出后无残留居民、真实 chunk 恢复。发布 jar 上均通过。
+- 真实双客户端（独立 `run`/`run-client2` 与独立 AutoJS 端口，dev 专用服务器）：两名玩家同房间时客户端 `players` 列表各看到对方一次、双方 PlayerInfo 都在线；服务端移动其中一人后两边位置同步；退出后另一客户端立即移除该实体而 PlayerInfo 保留。测试钩子 `canceljoin` 仅由 `-Dcannedmonster.spaceTestHooks=true`/`CANNEDMONSTER_SPACE_TEST_HOOKS=true` 或 `-PspaceTestHooks` 开启；未开启的专用服务器命令树中不存在该命令，`recover` 仍存在。
+- 另实测：融合体（`/fusion spawn cow pig`）可被空间罐捕捉，居民保留 1 个融合成员，`started` 重新加载后成员仍为 1；套绳生物与乘客捕捉被拒绝且不创建空间。
+- 构建：1.21.1 `clean build verifyHotDebug` 102 项、1.20.1 42 项、26.1 41 项、common 41 项测试通过。
+
+限制：1.20.1/26.1 只有编译用 `SpacePlatform`/`SpaceStore` 占位（`supported=false`），不运行虚拟空间。未覆盖：未走 `EntityGetter` 的私有世界查询、第三方模组缓存引用/直接字段、自定义声音/粒子包、未加载区块中的外部查询（台账权威、实体按需重建）、房间平移重叠时声音/粒子以外的坐标型副作用仲裁、长时间运行/规模性能；双客户端只做了短时可见性/移动/移除验证，未做网络延迟或长时间会话。`SpaceLedger` 仍是用户测试要求的纯数据台账，本实现的持久化走 target 的 `SpaceStore`。
 
 ### 当前配方（默认材料，可调整）
 
@@ -79,6 +111,7 @@ NeoForge 1.21.1 仍是主要开发和验证版本，但公共层不再等同于 
 成品 jar 在独立 `Monster cans verification` 世界通过 AutoJS 的 client/server 两端验证，未使用生物 ID 特判实现功能；脚本保留在 target 的 `src/test/resources/cans/`。
 
 - `hand-regression.js`：42 项检查，包括八物品注册、配方加载、捕捉、名字/血量保留、物品序列化、方块释放、融合、普通型剥离融合成员并保留身体、大型保存/释放、已有融合体展平、悦灵不吞罐头、阻挡释放保留、投掷型不直接捕捉和空间型占位。最终 jar 复跑通过。
+- `space-virtual-regression.js` / `space-death-regression.js` / `space-rollback-regression.js` 仍保留早期 92 + 21 + 22 项记录（未在本轮发布 jar 上复跑；rollback 脚本用 `SD.push` 注入失效帧，真实事件路径由 `space-audit-regression.js` 的 `canceljoin` 覆盖）。覆盖虚拟方块/碰撞、外部查询隐藏、锚点跟随、方块容器/容器实体载体、丢锚拒绝与救援、双空间实体/声音/粒子隔离、内部房间重叠的身份与声音仲裁、死亡掉落位置、进入/捕捉事务回滚。`space-audit-regression.js` / `space-restart-check.js` / `space-client-check.js` / `space-client-ghost-check.js` 为本轮 78 + 17 + 9 + 2 项发布 jar 结果。脚本结束清理空间、居民、罐头、矿车与测试生物。
 - `throw-regression.js`：7 段真实蓄力和飞行碰撞、50 项检查，通过普通投掷捕捉/融合、空普通投掷罐命中三成员融合体剥离最上层成员并保留其余成员、大型投掷捕捉/方块释放融合体、随机方块生成和空投返还。每段实际使用 25 tick 后松开，不直接调用 onHit。随机生成的生物在下一空投测试前移除，避免把正常捕捉误判成“空投失败”。
 - 客户端额外通过实际 keyUse 按住/松开，经网络产生投掷物，服务器回读目标移除、手中扣除且仅一个满罐头掉落。八个实际 BakedModel 均解析到对应罐头纹理，不是缺失贴图。
 - `recipe-regression.js`：七个配方均以真实 3×3 CraftingInput 匹配 RecipeManager，assemble 返回正确物品。空间型无配方。
@@ -152,7 +185,7 @@ NeoForge 1.21.1 仍是主要开发和验证版本，但公共层不再等同于 
 
 构建与打包：
 
-- `./gradlew clean build` 通过，30 项测试零失败；新增 `BodyTransformer120Test` 对 1.20.1 合并 jar 做真实类索引与 `Entity`、`SynchedEntityData`、`Mob`、`PathNavigation` 变换检查。
+- `./gradlew clean build` 通过，42 项测试零失败；新增 `BodyTransformer120Test` 对 1.20.1 合并 jar 做真实类索引与 `Entity`、`SynchedEntityData`、`Mob`、`PathNavigation` 变换检查。
 - Mixin 使用 MDG legacyforge 的 `mixin` 扩展生成 `cannedmonster.refmap.json`，并写入 manifest `MixinConfigs`；`reobfJar` 同时重映射 refmap。
 - 单 jar 方案不可用：ModLauncher 会把含 `ITransformationService` 的 jar 排除出普通模组发现，Mixin 在早期读不到配置。1.20.1 改为两个文件：`build/libs/CannedMonster-forge-1.20.1-<version>.jar`（普通游戏模组）和 `build/bootstrap/cannedmonster-bootstrap-dev.jar` 重命名为 `cannedmonster-bootstrap.jar` 的启动服务/ASM jar。二者都必须放入 `mods/`。开发运行只放启动服务 jar；`runClient -PverifyPackagedMod` 自动准备这两个文件。
 - 已用 AutoJS 1.0.1 / KubeJS 2101.7.2，在源码 `runClient` 和 `runClient -PverifyPackagedMod`（集成服）验证：`Entity`/`SynchedEntityData` 注入 `BoundObject`；牛+羊融合最大生命 9、成员不入世界、位置共享；三成员 7→剥离 6.5→10；generic 2 点伤害只扣 2；真实 `Player.interactOn` 空罐捕捉返回 `CONSUME`；玩家满罐融合/空罐取出最大生命 20↔15；7 个配方加载；客户端收到 1 个外观成员并提交 `[504,200]` 顶点；`ClientRiding.fusion` 为 true。
@@ -172,7 +205,7 @@ NeoForge 1.21.1 仍是主要开发和验证版本，但公共层不再等同于 
 
 构建与启动：
 
-- `./gradlew clean build` 通过，29 项共享测试零失败。
+- `./gradlew clean build` 通过，41 项共享测试零失败。
 - 开发客户端 `runClient` 启动到主菜单并进入升级后的测试世界；客户端 ASM 统计显示 `cannedmonster:fusion` 已注册（该统计按“被处理器选中”的类计数，不是实际改写数；独立探针显示约 184/6596 个类被实际改写）。
 - 旧 1.21.1 世界可直接升级打开；升级界面需要手动/脚本点击“I know what I'm doing!”和“Yes”。
 

@@ -49,6 +49,7 @@ public abstract class BaseCanItem extends Item {
     public boolean storesFusion() { return large; }
     public boolean throwable() { return throwable; }
     public boolean random() { return random; }
+    public boolean spatial() { return spatial; }
     public boolean storesMobs() { return !random && !spatial; }
 
     private record Press(boolean empty, InteractionHand hand, ItemStack original, ItemStack snapshot) {}
@@ -62,16 +63,27 @@ public abstract class BaseCanItem extends Item {
 
     @Override
     public InteractionResult interactLivingEntity(ItemStack stack, Player player, LivingEntity target, InteractionHand hand) {
-        if (throwable || spatial) return InteractionResult.PASS;
+        if (throwable) return InteractionResult.PASS;
         if (!(target instanceof Mob mob)) return InteractionResult.FAIL;
         if (target.level().isClientSide()) return InteractionResult.SUCCESS;
+        if (spatial) {
+            return player instanceof net.minecraft.server.level.ServerPlayer server
+                    && cc.sighs.cannedmonster.space.SpaceManager.capture(server, mob, stack)
+                    ? InteractionResult.CONSUME : InteractionResult.FAIL;
+        }
         return CanActions.onMob(stack, mob, player) ? InteractionResult.CONSUME : InteractionResult.FAIL;
     }
 
     @Override
     public InteractionResult useOn(UseOnContext context) {
-        if (throwable || spatial) return InteractionResult.PASS;
+        if (throwable) return InteractionResult.PASS;
         ItemStack stack = context.getItemInHand();
+        if (spatial) {
+            if (context.getLevel().isClientSide()) return InteractionResult.SUCCESS;
+            if (!(context.getPlayer() instanceof net.minecraft.server.level.ServerPlayer player)) return InteractionResult.FAIL;
+            return cc.sighs.cannedmonster.space.SpaceManager.enter(player, stack, context.getHand())
+                    ? InteractionResult.CONSUME : InteractionResult.FAIL;
+        }
         if (!CanContents.filled(stack)) return InteractionResult.PASS;
         if (!(context.getLevel() instanceof ServerLevel level)) return InteractionResult.SUCCESS;
         Vec3 position = Vec3.atBottomCenterOf(context.getClickedPos().relative(context.getClickedFace()));
@@ -153,6 +165,7 @@ public abstract class BaseCanItem extends Item {
     public Component getName(ItemStack stack) {
         Component base = super.getName(stack);
         if (!CanContents.filled(stack)) return base;
+        if (spatial) return Component.translatable("item.cannedmonster.with_space", base, CanContents.spaceCount(stack));
         if (storesFusion()) return Component.translatable("item.cannedmonster.with_count", base, CanContents.count(stack));
         String name = CanContents.name(stack);
         return name.isEmpty() ? base : Component.translatable("item.cannedmonster.with_name", base, name);
@@ -160,7 +173,10 @@ public abstract class BaseCanItem extends Item {
 
     protected void tooltip(ItemStack stack, Consumer<Component> tooltip) {
         if (spatial) {
-            tooltip.accept(Component.translatable("tooltip.cannedmonster.spatial_pending").withStyle(ChatFormatting.GRAY));
+            tooltip.accept(Component.translatable(CanContents.spaceId(stack) == null
+                    ? "tooltip.cannedmonster.spatial_empty"
+                    : "tooltip.cannedmonster.spatial_ready", CanContents.spaceCount(stack)).withStyle(ChatFormatting.GRAY));
+            tooltip.accept(Component.translatable("tooltip.cannedmonster.spatial_use").withStyle(ChatFormatting.GRAY));
             return;
         }
         if (random) {

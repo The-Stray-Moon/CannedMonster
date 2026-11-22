@@ -27,4 +27,20 @@
   "message.cannedmonster.player_fused": "Fused %s mob(s) into your body",
   "message.cannedmonster.player_extracted": "Extracted from your body: %s",
   "message.cannedmonster.failed": "Can operation failed; contents retained"
+,
+  "item.cannedmonster.with_space": "%s (space residents: %s)",
+  "tooltip.cannedmonster.spatial_empty": "Spatial room: use a mob to admit it, use air/a block to enter",
+  "tooltip.cannedmonster.spatial_ready": "Spatial room established with %s resident(s); use air/a block to enter",
+  "tooltip.cannedmonster.spatial_use": "The client receives a virtual room view; right-click a wall/floor/ceiling to exit",
+  "message.cannedmonster.space_already": "Already inside a virtual space",
+  "message.cannedmonster.space_entered": "Entered the virtual space",
+  "message.cannedmonster.space_exited": "Left the virtual space",
+  "message.cannedmonster.space_anchor_failed": "Could not leave the external can anchor; entry cancelled",
+  "message.cannedmonster.space_anchor_lost": "The external can anchor is missing; still inside",
+  "message.cannedmonster.space_teleport_failed": "Space teleport failed; entry rolled back",
+  "message.cannedmonster.space_capture_failed": "Could not admit the mob; changes rolled back",
+  "message.cannedmonster.space_too_large": "That mob is too large for the room",
+  "message.cannedmonster.space_captured": "Admitted %s into the virtual space",
+  "message.cannedmonster.space_recovered": "Recovered the lost space anchor as a can at its last position",
+  "message.cannedmonster.space_anchor_present": "The space anchor still exists; recovery refused"
 }

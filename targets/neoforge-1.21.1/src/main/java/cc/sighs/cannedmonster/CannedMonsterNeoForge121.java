@@ -15,12 +15,18 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Mod(CannedMonsterNeoForge121.MOD_ID)
 public final class CannedMonsterNeoForge121 {
     public static final String MOD_ID = "cannedmonster";
     private static final DynamicCommandExceptionType ERROR = new DynamicCommandExceptionType(message -> Component.literal(String.valueOf(message)));
+    private static final boolean SPACE_TEST_HOOKS = Boolean.getBoolean("cannedmonster.spaceTestHooks")
+            || "true".equalsIgnoreCase(System.getenv("CANNEDMONSTER_SPACE_TEST_HOOKS"));
+    private static final Map<String, Integer> CANCEL_JOINS = new HashMap<>();
+    private static boolean cancelJoinHook;
 
     public CannedMonsterNeoForge121(net.neoforged.bus.api.IEventBus modBus, net.neoforged.fml.ModContainer container) {
         container.registerConfig(net.neoforged.fml.config.ModConfig.Type.COMMON, FlightConfig.SPEC);
@@ -62,6 +68,36 @@ public final class CannedMonsterNeoForge121 {
                 cc.sighs.cannedmonster.fusion.visual.AppearanceSync.leave(event.getEntity()));
         NeoForge.EVENT_BUS.addListener((ServerStoppedEvent event) -> cc.sighs.cannedmonster.fusion.visual.AppearanceSync.stop());
         NeoForge.EVENT_BUS.addListener(this::canInteraction);
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) ->
+                cc.sighs.cannedmonster.space.SpaceManager.tick(event.getServer()));
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.server.ServerStartedEvent event) ->
+                cc.sighs.cannedmonster.space.SpaceManager.started(event.getServer()));
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.server.ServerStoppingEvent event) ->
+                cc.sighs.cannedmonster.space.SpaceManager.saved(event.getServer()));
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.level.LevelEvent.Save event) -> {
+            if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level
+                    && level.getServer() != null && level == level.getServer().overworld()) {
+                cc.sighs.cannedmonster.space.SpaceManager.saved(level.getServer());
+            }
+        });
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerLoggedInEvent event) -> {
+            if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)
+                cc.sighs.cannedmonster.space.SpaceManager.joined(player);
+        });
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerLoggedOutEvent event) -> {
+            if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)
+                cc.sighs.cannedmonster.space.SpaceManager.clientLeft(player);
+        });
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.entity.living.LivingDeathEvent event) ->
+                cc.sighs.cannedmonster.space.SpaceManager.entityDied(event.getEntity()));
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerRespawnEvent event) -> {
+            if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)
+                cc.sighs.cannedmonster.space.SpaceManager.abandon(player);
+        });
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerChangedDimensionEvent event) -> {
+            if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)
+                cc.sighs.cannedmonster.space.SpaceManager.abandon(player);
+        });
         FusionRuntime.initialize();
         NeoForge.EVENT_BUS.addListener(this::registerCommands);
         NeoForge.EVENT_BUS.addListener(this::leave);
@@ -72,7 +108,12 @@ public final class CannedMonsterNeoForge121 {
         if (!(event.getItemStack().getItem() instanceof cc.sighs.cannedmonster.can.MonsterCanItem can)) return;
         if (event.getEntity().isSpectator()) return;
         net.minecraft.world.InteractionResult result = net.minecraft.world.InteractionResult.PASS;
-        if (!can.throwable() && can.storesMobs()) {
+        if (!can.throwable() && can.spatial()) {
+            result = event.getTarget() instanceof net.minecraft.world.entity.Mob mob
+                    && event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player
+                    && cc.sighs.cannedmonster.space.SpaceManager.capture(player, mob, event.getItemStack())
+                    ? net.minecraft.world.InteractionResult.CONSUME : net.minecraft.world.InteractionResult.FAIL;
+        } else if (!can.throwable() && can.storesMobs()) {
             result = event.getTarget() instanceof net.minecraft.world.entity.LivingEntity living
                     ? can.interactLivingEntity(event.getItemStack(), event.getEntity(), living, event.getHand())
                     : net.minecraft.world.InteractionResult.FAIL;
@@ -86,9 +127,20 @@ public final class CannedMonsterNeoForge121 {
                 && !cc.sighs.cannedmonster.fusion.RemovalCalls.active(mob)) {
             FusionRuntime.detach(mob);
         }
+        Entity entity = event.getEntity();
+        if (!entity.level().isClientSide() && cc.sighs.cannedmonster.space.SpaceManager.isSpaceOwned(entity) && entity.isRemoved()) {
+            // UNLOADED_TO_CHUNK, UNLOADED_WITH_PLAYER and CHANGED_DIMENSION are not
+            // terminal: a resident riding a logging-out player must keep its ledger row.
+            Entity.RemovalReason reason = entity.getRemovalReason();
+            if (reason == Entity.RemovalReason.KILLED || reason == Entity.RemovalReason.DISCARDED) {
+                cc.sighs.cannedmonster.space.SpaceManager.forget(entity);
+            }
+        }
     }
 
     private void stop(ServerStoppedEvent event) {
+        CANCEL_JOINS.clear();
+        cc.sighs.cannedmonster.space.SpaceManager.stop(event.getServer());
         FusionRuntime.clear();
     }
 
@@ -120,6 +172,39 @@ public final class CannedMonsterNeoForge121 {
                                             source.sendSuccess(() -> Component.literal("Fusion: " + first + " -> " + body + " [" + host.getUUID() + "]"), true);
                                             return 1;
                                         })))));
+        event.getDispatcher().register(Commands.literal("cannedmonster").requires(source -> source.hasPermission(2))
+                .then(Commands.literal("space").then(Commands.literal("recover").executes(context -> {
+                    if (!cc.sighs.cannedmonster.space.SpaceManager.recover(context.getSource().getPlayerOrException())) {
+                        throw ERROR.create("No recoverable virtual-space anchor");
+                    }
+                    return 1;
+                }))));
+        // Test-only hook, absent from normal production sessions. Enable explicitly with
+        // -Dcannedmonster.spaceTestHooks=true (or CANNEDMONSTER_SPACE_TEST_HOOKS=true).
+        if (SPACE_TEST_HOOKS) {
+            event.getDispatcher().register(Commands.literal("cannedmonster").requires(source -> source.hasPermission(2))
+                    .then(Commands.literal("space").then(Commands.literal("canceljoin")
+                            .then(Commands.argument("type", ResourceLocationArgument.id())
+                                    .then(Commands.argument("count", com.mojang.brigadier.arguments.IntegerArgumentType.integer(1))
+                                            .executes(context -> {
+                                                String type = ResourceLocationArgument.getId(context, "type").toString();
+                                                int count = com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(context, "count");
+                                                CANCEL_JOINS.merge(type, count, Integer::sum);
+                                                if (!cancelJoinHook) {
+                                                    cancelJoinHook = true;
+                                                    NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.entity.EntityJoinLevelEvent join) -> {
+                                                        if (!(join.getLevel() instanceof net.minecraft.server.level.ServerLevel)) return;
+                                                        String id = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE
+                                                                .getKey(join.getEntity().getType()).toString();
+                                                        Integer left = CANCEL_JOINS.get(id);
+                                                        if (left == null || left <= 0) return;
+                                                        CANCEL_JOINS.put(id, left - 1);
+                                                        join.setCanceled(true);
+                                                    });
+                                                }
+                                                return 1;
+                                            }))))));
+        }
     }
 }
 

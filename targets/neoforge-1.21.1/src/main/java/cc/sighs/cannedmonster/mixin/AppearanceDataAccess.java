@@ -8,22 +8,22 @@ import java.util.Arrays;
 import java.util.List;
 
 @Mixin(SynchedEntityData.class)
-public interface AppearanceDataAccess extends cc.sighs.cannedmonster.fusion.visual.AppearanceData {
+public abstract class AppearanceDataAccess implements cc.sighs.cannedmonster.fusion.visual.AppearanceData {
     @Accessor("itemsById")
-    SynchedEntityData.DataItem<?>[] cannedmonster$itemArray();
+    protected abstract SynchedEntityData.DataItem<?>[] cannedmonster$itemArray();
 
     @Override
-    default List<SynchedEntityData.DataItem<?>> cannedmonster$items() {
+    public List<SynchedEntityData.DataItem<?>> cannedmonster$items() {
         return Arrays.asList(cannedmonster$itemArray());
     }
 
     @Override
-    default int cannedmonster$id(net.minecraft.network.syncher.EntityDataAccessor<?> accessor) {
+    public int cannedmonster$id(net.minecraft.network.syncher.EntityDataAccessor<?> accessor) {
         return accessor.id();
     }
 
     @Override
-    default net.minecraft.network.syncher.EntityDataSerializer<?> cannedmonster$serializer(
+    public net.minecraft.network.syncher.EntityDataSerializer<?> cannedmonster$serializer(
             net.minecraft.network.syncher.EntityDataAccessor<?> accessor) {
         return accessor.serializer();
     }

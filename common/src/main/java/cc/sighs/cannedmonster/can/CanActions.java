@@ -30,6 +30,7 @@ public final class CanActions {
         if (!(stack.getItem() instanceof MonsterCanItem item) || !item.storesMobs()
                 || !(target.level() instanceof ServerLevel level) || BodyLinks.isFacet(target)
                 || !target.isAlive() || target.isRemoved() || target.isPassenger() || target.isVehicle() || target.isLeashed()) return false;
+        if (cc.sighs.cannedmonster.space.SpaceManager.spaceOf(target) != null) return false;
         try {
             if (!CanContents.filled(stack)) {
                 if (!FusionRuntime.facets(target).isEmpty() && !item.storesFusion()) return peel(stack, target, actor);
