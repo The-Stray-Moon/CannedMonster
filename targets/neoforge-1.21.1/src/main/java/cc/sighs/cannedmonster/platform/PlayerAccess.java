@@ -27,4 +27,10 @@ public final class PlayerAccess {
     public static void message(Player player, Component message) {
         player.displayClientMessage(message, true);
     }
+
+    public static void syncInventory(Player player) {
+        if (player instanceof net.minecraft.server.level.ServerPlayer server) {
+            server.inventoryMenu.broadcastChanges();
+        }
+    }
 }

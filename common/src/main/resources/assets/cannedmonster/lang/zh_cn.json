@@ -41,6 +41,8 @@
   "message.cannedmonster.space_capture_failed": "收容失败，改动已回滚",
   "message.cannedmonster.space_too_large": "该生物对房间来说太大",
   "message.cannedmonster.space_captured": "已将 %s 送入虚拟空间",
+  "message.cannedmonster.space_released": "已将 %s 放出虚拟空间",
+  "message.cannedmonster.space_shattered": "空间罐头已被摧毁，内容物已全部弹出",
   "message.cannedmonster.space_recovered": "已在最后的锚点位置重新生成罐头",
   "message.cannedmonster.space_anchor_present": "空间锚点仍存在，拒绝救援"
 }

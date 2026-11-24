@@ -118,6 +118,20 @@ public final class SpaceDomain {
         return frame.room.contains(entity.position());
     }
 
+    /** A resident executing inside its enclosed room has no sky light to read. */
+    public static boolean isolated(Entity entity) {
+        Frame frame = frame();
+        return frame.active() && entity != null && frame.owner() == entity;
+    }
+
+    /** Room interiors are roofed: no sky exposure and no precipitation. */
+    public static boolean roofed(Level level, net.minecraft.core.BlockPos pos) {
+        Frame frame = frame();
+        if (frame.active() && frame.level() == level && frame.room().contains(pos)) return true;
+        return level instanceof net.minecraft.server.level.ServerLevel server
+                && !SpaceManager.spacesAt(server, net.minecraft.world.phys.Vec3.atCenterOf(pos)).isEmpty();
+    }
+
     public static boolean sameSpace(Entity entity) {
         return sameSpace(frame(), entity);
     }

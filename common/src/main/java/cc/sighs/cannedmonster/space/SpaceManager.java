@@ -53,6 +53,7 @@ public final class SpaceManager {
     private static final Map<UUID, Integer> RESYNC_AT = new HashMap<>();
     private static final ListTag UNPARSED = new ListTag();
     private static int tickCounter;
+    private static boolean stopped;
 
     public record ContainerCarrier(BlockPos pos, int slot) {}
 
@@ -76,6 +77,10 @@ public final class SpaceManager {
         private BlockPos anchorTicket;
         private final Map<UUID, CompoundTag> residentData = new HashMap<>();
         private final Map<UUID, CompoundTag> derivedData = new HashMap<>();
+        private final java.util.List<UUID> residentOrder = new ArrayList<>();
+        private boolean destroyPending;
+        private int destroyTicks;
+        private String anchorState = "UNKNOWN";
 
         private Space(UUID id, ServerLevel level, RoomGeometry internal, RoomGeometry client, int anchorChunkX, int anchorChunkZ) {
             this.id = id;
@@ -96,19 +101,28 @@ public final class SpaceManager {
         public Vec3 lastAnchor() { return lastAnchor; }
         public Map<UUID, CompoundTag> residents() { return residentData; }
         public Map<UUID, CompoundTag> derived() { return derivedData; }
+        public java.util.List<UUID> residentOrder() { return residentOrder; }
+        public boolean destroyPending() { return destroyPending; }
     }
 
     public static boolean enter(ServerPlayer player, ItemStack stack, InteractionHand hand) {
-        if (!SpacePlatform.supported()) return false;
+        if (!SpacePlatform.supported()) {
+            restoreEntryHand(player, hand, stack);
+            return false;
+        }
         if (player == null || stack == null || hand == null || !(player.level() instanceof ServerLevel level)) return false;
         if (PLAYERS.containsKey(player.getUUID())) {
             PlayerAccess.message(player, Component.translatable("message.cannedmonster.space_already"));
+            restoreEntryHand(player, hand, stack);
             return false;
         }
         UUID requested = CanContents.spaceId(stack);
         boolean newSpace = requested == null || !SPACES.containsKey(requested);
         Space space = spaceFor(stack, player, level);
-        if (space == null) return false;
+        if (space == null) {
+            restoreEntryHand(player, hand, stack);
+            return false;
+        }
         Vec3 anchor = player.position();
         Vec3 previousAnchor = space.lastAnchor;
         ItemStack dropped = stack.copyWithCount(1);
@@ -121,10 +135,12 @@ public final class SpaceManager {
         if (!level.addFreshEntity(item)) {
             item.discard();
             rollbackEntry(space, newSpace, stack);
+            restoreEntryHand(player, hand, stack);
             PlayerAccess.message(player, Component.translatable("message.cannedmonster.space_anchor_failed"));
             return false;
         }
         player.setItemInHand(hand, ItemStack.EMPTY);
+        PlayerAccess.syncInventory(player);
         space.anchorItem = item.getUUID();
         space.anchorPlayer = null;
         space.anchorEntity = null;
@@ -153,17 +169,24 @@ public final class SpaceManager {
             SAVED_PLAYERS.remove(player.getUUID());
             SYNC.remove(player.getUUID());
             item.discard();
-            player.setItemInHand(hand, dropped);
             SpacePlatform.restoreRoom(player, space);
             space.anchorItem = null;
             if (previousAnchor != null) rebaseTo(space, previousAnchor);
             else space.lastAnchor = null;
             rollbackEntry(space, newSpace, dropped);
+            player.setItemInHand(hand, dropped);
+            PlayerAccess.syncInventory(player);
             PlayerAccess.message(player, Component.translatable("message.cannedmonster.space_teleport_failed"));
             return false;
         }
         PlayerAccess.message(player, Component.translatable("message.cannedmonster.space_entered"));
         return true;
+    }
+
+    private static void restoreEntryHand(ServerPlayer player, InteractionHand hand, ItemStack stack) {
+        if (player == null || hand == null || stack == null) return;
+        player.setItemInHand(hand, stack);
+        PlayerAccess.syncInventory(player);
     }
 
     /** Undo a failed first entry: no space record, no ticket and no id on the returned can. */
@@ -242,24 +265,276 @@ public final class SpaceManager {
             EntityStorage.load(resident, data);
             resident.setUUID(residentId);
             resident.setPersistenceRequired();
-            Vec3 spawn = space.internal.spawn();
+            Vec3 spawn = residentSpawn(space, space.residentOrder.size());
             EntityStorage.position(resident, spawn, mob.getXRot());
             resident.setDeltaMovement(Vec3.ZERO);
+            // Register before insertion so the entity tracker's AddEntity/bundle is
+            // filtered as space-owned; otherwise an external client sees the resident
+            // at the internal room coordinates until the next sync.
+            RESIDENTS.put(residentId, space);
+            space.residentOrder.add(residentId);
             if (!level.addFreshEntity(resident)) throw new IllegalStateException("Level rejected resident");
         } catch (RuntimeException failure) {
+            RESIDENTS.remove(residentId);
+            space.residentOrder.remove(residentId);
+            space.residentData.remove(residentId);
             if (resident != null) resident.discard();
             rollbackEntry(space, newSpace, stack);
             LOGGER.warn("Cannot admit {} into virtual space: {}", mob.getType(), failure.toString());
             PlayerAccess.message(player, Component.translatable("message.cannedmonster.space_capture_failed"));
             return false;
         }
-        RESIDENTS.put(residentId, space);
         space.residentData.put(residentId, EntityStorage.save(resident));
         mob.setRemoved(Entity.RemovalReason.DISCARDED);
         CanContents.storeSpace(stack, space.id, space.residentData.size());
         forceRoom(space);
         PlayerAccess.message(player, Component.translatable("message.cannedmonster.space_captured", mob.getName()));
         return true;
+    }
+
+    private static java.util.List<UUID> orderedResidentIds(Space space) {
+        java.util.List<UUID> ids = new ArrayList<>();
+        for (UUID id : space.residentOrder) if (space.residentData.containsKey(id)) ids.add(id);
+        for (UUID id : space.residentData.keySet()) if (!ids.contains(id)) ids.add(id);
+        return ids;
+    }
+
+    private static Vec3 residentSpawn(Space space, int index) {
+        Vec3 base = space.internal.spawn();
+        int col = index % 3;
+        int row = (index / 3) % 3;
+        return new Vec3(base.x + (col - 1) * 2.0, base.y, base.z + (row - 1) * 2.0);
+    }
+
+    /**
+     * Release the last resident admitted to the space held by this stack (LIFO).
+     * A failed level insertion keeps both the ledger row and the can reference.
+     */
+    public static boolean releaseLast(ServerPlayer player, ItemStack stack, ServerLevel level, Vec3 position) {
+        if (!SpacePlatform.supported() || player == null || stack == null || level == null || position == null) return false;
+        if (PLAYERS.containsKey(player.getUUID())) return false;
+        UUID spaceId = CanContents.spaceId(stack);
+        Space space = spaceId == null ? null : SPACES.get(spaceId);
+        if (space == null || space.level != level || space.destroyPending) return false;
+        UUID residentId = null;
+        for (int i = space.residentOrder.size() - 1; i >= 0; i--) {
+            UUID candidate = space.residentOrder.get(i);
+            if (QUARANTINED.containsKey(candidate)) continue;
+            if (space.residentData.containsKey(candidate)) {
+                residentId = candidate;
+                break;
+            }
+        }
+        if (residentId == null) return false;
+        final UUID releasedId = residentId;
+        CompoundTag data = space.residentData.get(residentId);
+        if (data == null) return false;
+        Mob mob = null;
+        try {
+            Entity existing = SpaceDomain.raw(() -> level.getEntity(releasedId));
+            if (existing instanceof Mob current && !current.isRemoved()) {
+                Space owner = trackedSpace(current);
+                if (owner != null && owner != space) {
+                    throw new IllegalStateException("UUID is owned by another space");
+                }
+                mob = current;
+                Mob moved = mob;
+                SpaceDomain.raw(() -> EntityStorage.position(moved, position, player.getYRot()));
+                moved.setDeltaMovement(Vec3.ZERO);
+            } else {
+                Entity created = EntityStorage.create(EntityStorage.string(data, "id"), level);
+                if (!(created instanceof Mob candidate)) throw new IllegalArgumentException("Not a mob");
+                mob = candidate;
+                EntityStorage.load(mob, data);
+                mob.setUUID(residentId);
+                mob.setPersistenceRequired();
+                EntityStorage.position(mob, position, player.getYRot());
+                mob.setDeltaMovement(Vec3.ZERO);
+                if (!level.addFreshEntity(mob)) {
+                    Entity conflict = SpaceDomain.raw(() -> level.getEntity(releasedId));
+                    if (conflict == null || SpaceManager.trackedSpace(conflict) != null) {
+                        throw new IllegalStateException("Level rejected release");
+                    }
+                    // The entity already exists in the real world: treat as released.
+                }
+            }
+        } catch (RuntimeException failure) {
+            if (mob != null) mob.discard();
+            LOGGER.warn("Cannot release resident {}: {}", residentId, failure.toString());
+            return false;
+        }
+        RESIDENTS.remove(residentId);
+        SpacePlatform.retrack(mob);
+        space.residentData.remove(residentId);
+        space.residentOrder.remove(residentId);
+        if (space.residentData.isEmpty() && space.derivedData.isEmpty() && !hasPlayer(space)
+                && !hasQuarantine(space)) {
+            if (space.anchorItem != null) {
+                Entity anchor = SpaceDomain.raw(() -> space.level.getEntity(space.anchorItem));
+                if (anchor != null) anchor.discard();
+            }
+            SPACES.remove(space.id);
+            SAVED_PLAYERS.entrySet().removeIf(entry -> entry.getValue() == space);
+            releaseRoomTicket(space);
+            releaseAnchorTicket(space);
+            CanContents.clearSpace(stack);
+        } else {
+            CanContents.storeSpace(stack, space.id, space.residentData.size());
+        }
+        PlayerAccess.syncInventory(player);
+        PlayerAccess.message(player, Component.translatable("message.cannedmonster.space_released", mob.getName()));
+        return true;
+    }
+
+    /**
+     * Only a terminal removal with a still-present can stack is confirmed destruction.
+     * Pickup/hopper transfer empties the live stack before discard; chunk unload and
+     * dimension transfer are not destruction. Missing carriers are never inferred here.
+     */
+    public static void anchorItemRemoved(ItemEntity item, Entity.RemovalReason reason) {
+        if (item == null || item.level().isClientSide()) return;
+        Space space = spaceForAnchorItem(item.getUUID());
+        if (space == null) return;
+        if (reason == Entity.RemovalReason.UNLOADED_TO_CHUNK || reason == Entity.RemovalReason.UNLOADED_WITH_PLAYER) {
+            space.anchorState = "UNLOADED";
+            return;
+        }
+        if (reason == Entity.RemovalReason.CHANGED_DIMENSION) {
+            space.anchorState = "TRANSFER";
+            return;
+        }
+        if (reason != Entity.RemovalReason.KILLED && reason != Entity.RemovalReason.DISCARDED) return;
+        if (item.getItem().isEmpty()) {
+            // Ownership transfer (player pickup or hopper): let updateCarrier follow it.
+            space.anchorState = "TRANSFER";
+            return;
+        }
+        space.anchorState = "DESTROYED";
+        space.destroyPending = true;
+        space.destroyTicks = 0;
+    }
+
+    private static Space spaceForAnchorItem(UUID itemId) {
+        if (itemId == null) return null;
+        for (Space space : SPACES.values()) {
+            if (itemId.equals(space.anchorItem)) return space;
+        }
+        return null;
+    }
+
+    /** Shatter a space after its only can was really destroyed, preserving failed transfers. */
+    private static void shatter(Space space) {
+        final Vec3 target = space.lastAnchor == null ? space.internal.spawn() : space.lastAnchor;
+        boolean failed = false;
+        for (ServerPlayer player : new ArrayList<>(space.level.getServer().getPlayerList().getPlayers())) {
+            if (PLAYERS.get(player.getUUID()) != space) continue;
+            PLAYERS.remove(player.getUUID());
+            SAVED_PLAYERS.remove(player.getUUID());
+            SYNC.remove(player.getUUID());
+            SpaceDomain.invalidate(player);
+            SpacePlatform.restoreRoom(player, space);
+            SpacePlatform.teleportPlayer(player, space.level, target, player.getYRot(), player.getXRot());
+            SpacePlatform.resetMovement(player);
+            if (player.level() != space.level || player.distanceToSqr(target) > 16.0) {
+                PLAYERS.put(player.getUUID(), space);
+                SAVED_PLAYERS.put(player.getUUID(), space);
+                failed = true;
+            } else {
+                PlayerAccess.message(player, Component.translatable("message.cannedmonster.space_shattered"));
+            }
+        }
+        java.util.List<UUID> residents = orderedResidentIds(space);
+        for (int index = 0; index < residents.size(); index++) {
+            UUID id = residents.get(index);
+            CompoundTag data = space.residentData.get(id);
+            if (data == null) continue;
+            Mob mob = null;
+            try {
+                double dx = (index % 3 - 1) * 1.5;
+                double dz = (index / 3 % 3 - 1) * 1.5;
+                Entity existing = SpaceDomain.raw(() -> space.level.getEntity(id));
+                if (existing instanceof Mob current && !current.isRemoved()) {
+                    Space owner = trackedSpace(current);
+                    if (owner != null && owner != space) {
+                        throw new IllegalStateException("UUID is owned by another space");
+                    }
+                    mob = current;
+                    Mob moved = mob;
+                    SpaceDomain.raw(() -> EntityStorage.position(moved, target.add(dx, 0, dz), moved.getYRot()));
+                    moved.setDeltaMovement(Vec3.ZERO);
+                } else {
+                    Entity created = EntityStorage.create(EntityStorage.string(data, "id"), space.level);
+                    if (!(created instanceof Mob candidate)) throw new IllegalArgumentException("Not a mob");
+                    mob = candidate;
+                    EntityStorage.load(mob, data);
+                    mob.setUUID(id);
+                    mob.setPersistenceRequired();
+                    EntityStorage.position(mob, target.add(dx, 0, dz), mob.getYRot());
+                    mob.setDeltaMovement(Vec3.ZERO);
+                    if (!space.level.addFreshEntity(mob)) {
+                        Entity conflict = SpaceDomain.raw(() -> space.level.getEntity(id));
+                        if (conflict == null || trackedSpace(conflict) != null) {
+                            throw new IllegalStateException("Level rejected resident");
+                        }
+                    }
+                }
+                RESIDENTS.remove(id);
+                SpacePlatform.retrack(mob);
+                space.residentData.remove(id);
+                space.residentOrder.remove(id);
+            } catch (RuntimeException failure) {
+                if (mob != null) mob.discard();
+                LOGGER.warn("Cannot eject resident {} on shatter: {}", id, failure.toString());
+                failed = true;
+            }
+        }
+        for (UUID id : new ArrayList<>(space.derivedData.keySet())) {
+            CompoundTag record = space.derivedData.get(id);
+            if (record == null) continue;
+            Entity created = null;
+            try {
+                double lx = EntityStorage.decimal(record, "LocalX");
+                double ly = EntityStorage.decimal(record, "LocalY");
+                double lz = EntityStorage.decimal(record, "LocalZ");
+                Entity existing = SpaceDomain.raw(() -> space.level.getEntity(id));
+                if (existing != null && !existing.isRemoved()) {
+                    Space owner = trackedSpace(existing);
+                    if (owner != null && owner != space) {
+                        throw new IllegalStateException("UUID is owned by another space");
+                    }
+                    created = existing;
+                    Entity moved = created;
+                    SpaceDomain.raw(() -> moved.setPos(target.x + lx, target.y + ly, target.z + lz));
+                } else {
+                    CompoundTag data = EntityStorage.compound(record, "Data");
+                    created = EntityStorage.create(EntityStorage.string(data, "id"), space.level);
+                    EntityStorage.load(created, data);
+                    created.setUUID(id);
+                    created.setPos(target.x + lx, target.y + ly, target.z + lz);
+                    if (!space.level.addFreshEntity(created)) {
+                        Entity conflict = SpaceDomain.raw(() -> space.level.getEntity(id));
+                        if (conflict == null || trackedSpace(conflict) != null) {
+                            throw new IllegalStateException("Level rejected derived");
+                        }
+                    }
+                }
+                DERIVED.remove(id);
+                SpacePlatform.retrack(created);
+                space.derivedData.remove(id);
+            } catch (RuntimeException failure) {
+                if (created != null) created.discard();
+                LOGGER.warn("Cannot eject derived {} on shatter: {}", id, failure.toString());
+                failed = true;
+            }
+        }
+        if (failed || !space.residentData.isEmpty() || !space.derivedData.isEmpty() || hasPlayer(space)) {
+            space.destroyPending = true;
+            return;
+        }
+        SPACES.remove(space.id);
+        SAVED_PLAYERS.entrySet().removeIf(entry -> entry.getValue() == space);
+        releaseRoomTicket(space);
+        releaseAnchorTicket(space);
     }
 
     /** Identity is the session maps (UUID), never a coordinate: rooms may overlap. */
@@ -275,6 +550,7 @@ public final class SpaceManager {
         if (id == null) return null;
         Space space = PLAYERS.get(id);
         if (space == null) space = RESIDENTS.get(id);
+        if (space == null) space = QUARANTINED.get(id);
         return space == null ? DERIVED.get(id) : space;
     }
 
@@ -282,7 +558,7 @@ public final class SpaceManager {
     public static boolean isSpaceOwned(Entity entity) {
         if (entity == null) return false;
         UUID id = entity.getUUID();
-        return RESIDENTS.containsKey(id) || DERIVED.containsKey(id);
+        return RESIDENTS.containsKey(id) || DERIVED.containsKey(id) || QUARANTINED.containsKey(id);
     }
 
     /** Entities spawned inside a room (drops, xp, arrows, babies) belong to that space. */
@@ -303,23 +579,109 @@ public final class SpaceManager {
     public static void forget(Entity entity) {
         if (entity == null || entity.level().isClientSide()) return;
         UUID id = entity.getUUID();
+        Space space = trackedSpace(id);
         QUARANTINED.remove(id);
-        Space space = RESIDENTS.remove(id);
-        if (space == null) space = DERIVED.remove(id);
+        RESIDENTS.remove(id);
+        DERIVED.remove(id);
         if (space == null) return;
-        space.residentData.remove(id);
+        boolean resident = space.residentData.remove(id) != null;
         space.derivedData.remove(id);
+        space.residentOrder.remove(id);
+        if (resident) refreshCarrier(space);
     }
 
-    /** Keeps a dying entity hidden and out of the ledger until vanilla really removes it. */
+    /**
+     * A dying resident leaves the live ledger at once so the can count, released set and
+     * saved record agree; only the quarantine row stays, to keep the corpse hidden until
+     * vanilla really removes it. Releasing must never recreate a dead resident.
+     */
     public static void quarantine(Entity entity) {
         if (entity == null || entity.level().isClientSide()) return;
         Space space = trackedSpace(entity);
-        if (space != null) QUARANTINED.put(entity.getUUID(), space);
+        if (space == null) return;
+        UUID id = entity.getUUID();
+        QUARANTINED.put(id, space);
+        if (space.residentData.remove(id) != null) {
+            space.residentOrder.remove(id);
+            RESIDENTS.remove(id);
+            refreshCarrier(space);
+        }
+    }
+
+    /** Keep every can that references this space showing the live resident count. */
+    private static void refreshCarrier(Space space) {
+        if (space == null || space.level.getServer() == null) return;
+        int count = space.residentData.size();
+        for (ServerPlayer player : space.level.getServer().getPlayerList().getPlayers()) {
+            if (player.level() != space.level) continue;
+            var inventory = player.getInventory();
+            boolean changed = false;
+            for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+                ItemStack stack = inventory.getItem(slot);
+                if (space.id.equals(CanContents.spaceId(stack)) && CanContents.spaceCount(stack) != count) {
+                    CanContents.storeSpace(stack, space.id, count);
+                    changed = true;
+                }
+            }
+            if (changed) PlayerAccess.syncInventory(player);
+        }
+        if (space.anchorItem != null) {
+            Entity anchor = SpaceDomain.raw(() -> space.level.getEntity(space.anchorItem));
+            if (anchor instanceof ItemEntity item && !item.isRemoved()) {
+                ItemStack stack = item.getItem();
+                if (space.id.equals(CanContents.spaceId(stack)) && CanContents.spaceCount(stack) != count) {
+                    CanContents.storeSpace(stack, space.id, count);
+                }
+            }
+        }
     }
 
     public static boolean isQuarantined(Entity entity) {
         return entity != null && QUARANTINED.containsKey(entity.getUUID());
+    }
+
+    /** Saved cans may predate a resident loss: the ledger is authoritative on join. */
+    private static void reconcileInventory(ServerPlayer player) {
+        var inventory = player.getInventory();
+        boolean changed = false;
+        for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+            ItemStack stack = inventory.getItem(slot);
+            UUID id = CanContents.spaceId(stack);
+            if (id == null) continue;
+            Space space = SPACES.get(id);
+            if (space == null) {
+                if (!hasOrphan(id.toString()) && CanContents.spaceCount(stack) != 0) {
+                    CanContents.clearSpace(stack);
+                    changed = true;
+                }
+                continue;
+            }
+            int count = space.residentData.size();
+            if (CanContents.spaceCount(stack) != count) {
+                CanContents.storeSpace(stack, id, count);
+                changed = true;
+            }
+        }
+        if (changed) PlayerAccess.syncInventory(player);
+    }
+
+    private static void reconcileStack(Space space, ItemStack stack) {
+        int count = space.residentData.size();
+        if (CanContents.spaceCount(stack) != count) CanContents.storeSpace(stack, space.id, count);
+    }
+
+    /**
+     * Pickup domain is the ItemEntity's session identity, not its can contents.
+     * An inside player may only take entities owned by their own space (including
+     * derived loot without a Space key); an outside player may only take external
+     * entities. The anchor can is external, so inside players cannot take it.
+     */
+    public static boolean blocksPickup(ServerPlayer player, ItemEntity item) {
+        if (player == null || item == null) return false;
+        Space playerSpace = PLAYERS.get(player.getUUID());
+        Space itemSpace = trackedSpace(item);
+        if (playerSpace == null) return itemSpace != null;
+        return itemSpace != playerSpace;
     }
 
     /** Other players sharing the same room, in join order. */
@@ -426,7 +788,8 @@ public final class SpaceManager {
     public static boolean isTracked(Entity entity) {
         if (entity == null) return false;
         UUID id = entity.getUUID();
-        return PLAYERS.containsKey(id) || RESIDENTS.containsKey(id) || DERIVED.containsKey(id);
+        return PLAYERS.containsKey(id) || RESIDENTS.containsKey(id) || DERIVED.containsKey(id)
+                || QUARANTINED.containsKey(id);
     }
 
     /** Residents persist in the space ledger only, never in world chunk entity data. */
@@ -439,7 +802,9 @@ public final class SpaceManager {
     }
 
     public static java.util.Collection<UUID> ownedEntities(Space space) {
-        java.util.List<UUID> ids = new ArrayList<>(space.residentData.keySet());
+        java.util.List<UUID> ids = new ArrayList<>();
+        for (UUID id : space.residentOrder) if (space.residentData.containsKey(id)) ids.add(id);
+        for (UUID id : space.residentData.keySet()) if (!ids.contains(id)) ids.add(id);
         ids.addAll(space.derivedData.keySet());
         return ids;
     }
@@ -520,12 +885,22 @@ public final class SpaceManager {
         SpaceDomain.reset();
         for (Space space : new ArrayList<>(SPACES.values())) {
             if (tickCounter % 20 == 0) prune(space);
-            if (space.residentData.isEmpty() && space.derivedData.isEmpty() && !hasPlayer(space)) {
-                releaseRoomTicket(space);
+            if (space.residentData.isEmpty() && space.derivedData.isEmpty() && !hasPlayer(space)
+                    && !hasQuarantine(space)) {
+                if (space.destroyPending) shatter(space);
+                else releaseRoomTicket(space);
                 continue;
             }
             forceRoom(space);
             updateCarrier(server, space);
+            if (space.destroyPending) {
+                if (carrierCount(space) > 0) {
+                    space.destroyPending = false;
+                    space.destroyTicks = 0;
+                } else if (++space.destroyTicks >= 2) {
+                    shatter(space);
+                }
+            }
         }
         tickCounter++;
         for (Map.Entry<UUID, Space> entry : new ArrayList<>(PLAYERS.entrySet())) {
@@ -542,6 +917,17 @@ public final class SpaceManager {
                 }
             }
             if (tickCounter % 100 == 0) SpacePlatform.sendRoom(player, space);
+            // An inside player must never keep the anchor can. Creative prediction or a
+            // delayed slot echo can reinsert it after entry; enforce the authoritative state.
+            var inventory = player.getInventory();
+            boolean cleared = false;
+            for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+                if (space.id.equals(CanContents.spaceId(inventory.getItem(slot)))) {
+                    inventory.setItem(slot, ItemStack.EMPTY);
+                    cleared = true;
+                }
+            }
+            if (cleared) PlayerAccess.syncInventory(player);
             SpacePlatform.sendEntityUpdates(player, space);
         }
     }
@@ -549,14 +935,17 @@ public final class SpaceManager {
     private static void updateCarrier(MinecraftServer server, Space space) {
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             if (player.level() != space.level) continue;
+            if (PLAYERS.get(player.getUUID()) == space) continue;
             var inventory = player.getInventory();
             for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
                 if (space.id.equals(CanContents.spaceId(inventory.getItem(slot)))) {
+                    reconcileStack(space, inventory.getItem(slot));
                     boolean inside = PLAYERS.get(player.getUUID()) == space;
                     space.anchorPlayer = player.getUUID();
                     space.anchorItem = null;
                     space.anchorEntity = null;
                     space.anchorBlock = null;
+                    space.anchorState = "CARRIER";
                     if (!inside) rebaseTo(space, player.position());
                     return;
                 }
@@ -565,6 +954,8 @@ public final class SpaceManager {
         if (space.anchorItem != null) {
             Entity item = SpaceDomain.raw(() -> space.level.getEntity(space.anchorItem));
             if (item instanceof ItemEntity entity && !entity.isRemoved()) {
+                reconcileStack(space, entity.getItem());
+                space.anchorState = "CARRIER";
                 rebaseTo(space, entity.position());
                 return;
             }
@@ -572,10 +963,12 @@ public final class SpaceManager {
         for (Entity entity : space.level.getAllEntities()) {
             if (entity instanceof ItemEntity item && !item.isRemoved()
                     && space.id.equals(CanContents.spaceId(item.getItem()))) {
+                reconcileStack(space, item.getItem());
                 space.anchorItem = item.getUUID();
                 space.anchorPlayer = null;
                 space.anchorEntity = null;
                 space.anchorBlock = null;
+                space.anchorState = "CARRIER";
                 rebaseTo(space, item.position());
                 return;
             }
@@ -587,6 +980,7 @@ public final class SpaceManager {
                         space.anchorItem = null;
                         space.anchorPlayer = null;
                         space.anchorBlock = null;
+                        space.anchorState = "CARRIER";
                         rebaseTo(space, entity.position());
                         return;
                     }
@@ -601,11 +995,13 @@ public final class SpaceManager {
             space.anchorItem = null;
             space.anchorPlayer = null;
             space.anchorEntity = null;
+            space.anchorState = "CARRIER";
             rebaseTo(space, Vec3.atCenterOf(block.pos()));
         }
     }
 
     public static void started(MinecraftServer server) {
+        stopped = false;
         PLAYERS.clear();
         RESIDENTS.clear();
         SPACES.clear();
@@ -619,6 +1015,7 @@ public final class SpaceManager {
     }
 
     public static void joined(ServerPlayer player) {
+        reconcileInventory(player);
         Space space = SAVED_PLAYERS.get(player.getUUID());
         if (space == null || PLAYERS.containsKey(player.getUUID())) return;
         forceRoom(space);
@@ -671,7 +1068,7 @@ public final class SpaceManager {
 
     /** Runs on level autosave and on shutdown so a crash does not lose the only copy. */
     public static void saved(MinecraftServer server) {
-        if (server == null) return;
+        if (server == null || stopped) return;
         snapshot(server);
         mergeUnparsed(server, SpaceStore.read(server));
         SpaceStore.write(server, ledger());
@@ -737,7 +1134,7 @@ public final class SpaceManager {
                 }
                 // UNLOADED_WITH_PLAYER / CHANGED_DIMENSION: keep the last ledger row.
             } else if (entity instanceof Mob mob && (!mob.isAlive() || mob.isDeadOrDying())) {
-                QUARANTINED.put(id, space);
+                quarantine(entity);
             } else {
                 space.residentData.put(id, EntityStorage.save(entity));
             }
@@ -755,10 +1152,17 @@ public final class SpaceManager {
                     forget(entity);
                 }
             } else if (entity instanceof Mob mob && (!mob.isAlive() || mob.isDeadOrDying())) {
-                QUARANTINED.put(id, space);
+                quarantine(entity);
             } else {
                 space.derivedData.put(id, derivedEntry(entity, space));
             }
+        }
+        // Quarantined corpses are no longer in residentData; clear the row only after
+        // vanilla really removed the entity, so a restart cannot resurrect it.
+        for (Map.Entry<UUID, Space> entry : new ArrayList<>(QUARANTINED.entrySet())) {
+            if (entry.getValue() != space) continue;
+            Entity corpse = SpaceDomain.raw(() -> space.level.getEntity(entry.getKey()));
+            if (corpse != null && corpse.isRemoved()) forget(corpse);
         }
     }
 
@@ -803,6 +1207,7 @@ public final class SpaceManager {
     }
 
     public static void stop(MinecraftServer server) {
+        stopped = true;
         // The authoritative snapshot was written on ServerStopping while the levels
         // were still open; saving again after ServerStopped would prune every entity
         // (levels already closed) and erase the ledger.
@@ -822,30 +1227,38 @@ public final class SpaceManager {
 
     private static void hydrate(Space space) {
         forceRoom(space);
-        for (Map.Entry<UUID, CompoundTag> entry : new ArrayList<>(space.residentData.entrySet())) {
-            UUID id = entry.getKey();
+        java.util.List<UUID> ordered = orderedResidentIds(space);
+        for (int index = 0; index < ordered.size(); index++) {
+            UUID id = ordered.get(index);
+            CompoundTag data = space.residentData.get(id);
+            if (data == null) continue;
+            Vec3 spawn = residentSpawn(space, index);
             Mob existing = null;
             Entity found = SpaceDomain.raw(() -> space.level.getEntity(id));
             if (found instanceof Mob mob) existing = mob;
             if (existing != null) {
                 Mob reused = existing;
-                SpaceDomain.raw(() -> EntityStorage.position(reused, space.internal.spawn(), reused.getXRot()));
+                SpaceDomain.raw(() -> EntityStorage.position(reused, spawn, reused.getXRot()));
                 RESIDENTS.put(id, space);
                 continue;
             }
             Mob mob = null;
             try {
-                Entity created = EntityStorage.create(EntityStorage.string(entry.getValue(), "id"), space.level);
+                Entity created = EntityStorage.create(EntityStorage.string(data, "id"), space.level);
                 if (!(created instanceof Mob candidate)) continue;
                 mob = candidate;
-                EntityStorage.load(mob, entry.getValue());
+                EntityStorage.load(mob, data);
                 mob.setUUID(id);
                 mob.setPersistenceRequired();
                 Mob placed = mob;
-                SpaceDomain.raw(() -> EntityStorage.position(placed, space.internal.spawn(), placed.getXRot()));
-                if (!space.level.addFreshEntity(placed)) throw new IllegalStateException("Rejected");
+                SpaceDomain.raw(() -> EntityStorage.position(placed, spawn, placed.getXRot()));
                 RESIDENTS.put(id, space);
+                if (!space.level.addFreshEntity(placed)) {
+                    RESIDENTS.remove(id);
+                    throw new IllegalStateException("Rejected");
+                }
             } catch (RuntimeException failure) {
+                RESIDENTS.remove(id);
                 LOGGER.warn("Cannot restore resident {}: {}", id, failure.toString());
                 if (mob != null) mob.discard();
             }
@@ -872,8 +1285,11 @@ public final class SpaceManager {
                 Entity placed = created;
                 SpaceDomain.raw(() -> placed.setPos(space.internal.x() + local.x, space.internal.y() + local.y,
                         space.internal.z() + local.z));
-                if (!space.level.addFreshEntity(created)) throw new IllegalStateException("Rejected");
                 DERIVED.put(id, space);
+                if (!space.level.addFreshEntity(created)) {
+                    DERIVED.remove(id);
+                    throw new IllegalStateException("Rejected");
+                }
             } catch (RuntimeException failure) {
                 LOGGER.warn("Cannot restore derived entity {}: {}", id, failure.toString());
                 if (created != null) created.discard();
@@ -907,15 +1323,22 @@ public final class SpaceManager {
             tag.putDouble("AnchorY", space.lastAnchor.y);
             tag.putDouble("AnchorZ", space.lastAnchor.z);
         }
+        if (space.destroyPending) tag.putBoolean("Destroyed", true);
+        tag.putString("AnchorState", space.anchorState);
         ListTag residents = new ListTag();
-        for (Map.Entry<UUID, CompoundTag> entry : space.residentData.entrySet()) {
-            if (QUARANTINED.containsKey(entry.getKey())) continue;
+        ListTag order = new ListTag();
+        for (UUID id : orderedResidentIds(space)) {
+            if (QUARANTINED.containsKey(id)) continue;
+            CompoundTag data = space.residentData.get(id);
+            if (data == null) continue;
             CompoundTag resident = new CompoundTag();
-            resident.putString("Id", entry.getKey().toString());
-            resident.put("Data", entry.getValue().copy());
+            resident.putString("Id", id.toString());
+            resident.put("Data", data.copy());
             residents.add(resident);
+            order.add(net.minecraft.nbt.StringTag.valueOf(id.toString()));
         }
         tag.put("Residents", residents);
+        tag.put("ResidentOrder", order);
         ListTag derived = new ListTag();
         for (Map.Entry<UUID, CompoundTag> entry : space.derivedData.entrySet()) {
             if (QUARANTINED.containsKey(entry.getKey())) continue;
@@ -969,7 +1392,28 @@ public final class SpaceManager {
                     UUID residentId = UUID.fromString(EntityStorage.string(resident, "Id"));
                     if (space.residentData.containsKey(residentId) || space.derivedData.containsKey(residentId)) continue;
                     space.residentData.put(residentId, EntityStorage.compound(resident, "Data").copy());
+                    space.residentOrder.add(residentId);
                 }
+                ListTag storedOrder = EntityStorage.stringList(roomTag, "ResidentOrder");
+                if (!storedOrder.isEmpty()) {
+                    java.util.List<UUID> ordered = new ArrayList<>();
+                    for (Tag orderTag : storedOrder) {
+                        if (!(orderTag instanceof net.minecraft.nbt.StringTag text)) continue;
+                        try {
+                            UUID residentId = UUID.fromString(cc.sighs.cannedmonster.platform.TagAccess.text(text));
+                            if (space.residentData.containsKey(residentId) && !ordered.contains(residentId)) {
+                                ordered.add(residentId);
+                            }
+                        } catch (IllegalArgumentException ignored) {
+                        }
+                    }
+                    for (UUID residentId : space.residentOrder) if (!ordered.contains(residentId)) ordered.add(residentId);
+                    space.residentOrder.clear();
+                    space.residentOrder.addAll(ordered);
+                }
+                space.destroyPending = EntityStorage.bool(roomTag, "Destroyed");
+                String anchorState = EntityStorage.string(roomTag, "AnchorState");
+                space.anchorState = anchorState.isEmpty() ? "UNKNOWN" : anchorState;
                 ListTag derived = EntityStorage.list(roomTag, "Derived");
                 for (Tag derivedTag : derived) {
                     if (!(derivedTag instanceof CompoundTag entry)) continue;
@@ -1013,6 +1457,12 @@ public final class SpaceManager {
 
     private static boolean hasPlayer(Space space) {
         for (Space value : PLAYERS.values()) if (value == space) return true;
+        return false;
+    }
+
+    /** A quarantined corpse still holds the room ticket until vanilla really removes it. */
+    private static boolean hasQuarantine(Space space) {
+        for (Space owner : QUARANTINED.values()) if (owner == space) return true;
         return false;
     }
 
@@ -1081,28 +1531,40 @@ public final class SpaceManager {
         return false;
     }
 
+    /**
+     * The room is block-aligned: move it, its residents and any inside player by whole
+     * blocks only. Moving entities by the raw fractional anchor delta while
+     * {@link RoomGeometry} floors its origin makes the room ratchet one block per
+     * rebase; residents drift out of the 13x8x13 room, lose virtual collisions and
+     * fall/suffocate (observed when a dropped anchor item's Y oscillates).
+     */
     private static void rebaseTo(Space space, Vec3 anchor) {
         Vec3 old = space.lastAnchor;
         if (old == null) {
             space.lastAnchor = anchor;
             return;
         }
-        Vec3 delta = anchor.subtract(old);
-        if (delta.lengthSqr() < 0.0001) return;
+        double dx = Math.floor(anchor.x) - Math.floor(old.x);
+        double dy = Math.floor(anchor.y) - Math.floor(old.y);
+        double dz = Math.floor(anchor.z) - Math.floor(old.z);
+        if (dx == 0.0 && dy == 0.0 && dz == 0.0) {
+            space.lastAnchor = anchor;
+            return;
+        }
         space.lastAnchor = anchor;
-        space.internal = space.internal.offset(delta.x, delta.y, delta.z);
+        space.internal = space.internal.offset(dx, dy, dz);
         for (ServerPlayer player : new ArrayList<>(space.level.getServer().getPlayerList().getPlayers())) {
             if (PLAYERS.get(player.getUUID()) != space) continue;
             SpaceDomain.raw(() -> {
-                player.setPos(player.getX() + delta.x, player.getY() + delta.y, player.getZ() + delta.z);
+                player.setPos(player.getX() + dx, player.getY() + dy, player.getZ() + dz);
             });
             SpacePlatform.resetMovement(player);
         }
         for (UUID id : ownedEntities(space)) {
             Entity entity = SpaceDomain.raw(() -> space.level.getEntity(id));
             if (entity != null) {
-                SpaceDomain.raw(() -> entity.setPos(entity.getX() + delta.x, entity.getY() + delta.y,
-                        entity.getZ() + delta.z));
+                SpaceDomain.raw(() -> entity.setPos(entity.getX() + dx, entity.getY() + dy,
+                        entity.getZ() + dz));
             }
         }
         forceRoom(space);
@@ -1153,9 +1615,14 @@ public final class SpaceManager {
         Space space = PLAYERS.get(player.getUUID());
         boolean inside = space != null;
         if (space == null) space = lostSpaceNear(player);
-        if (space == null || space.lastAnchor == null) return false;
-        // Never mint a second can while any valid carrier still exists (multiple carriers
-        // are a conflict, not a recovery): the id would then have two live anchors.
+        if (space == null || space.lastAnchor == null || space.destroyPending) return false;
+        // A known carrier (including an offline player or unloaded chunk) is not lost.
+        // Never mint a second can because the holder is temporarily unavailable.
+        if (space.anchorPlayer != null || space.anchorItem != null
+                || space.anchorEntity != null || space.anchorBlock != null) {
+            PlayerAccess.message(player, Component.translatable("message.cannedmonster.space_anchor_present"));
+            return false;
+        }
         if (carrierCount(space) > 0) {
             PlayerAccess.message(player, Component.translatable("message.cannedmonster.space_anchor_present"));
             return false;
@@ -1186,6 +1653,7 @@ public final class SpaceManager {
         int count = 0;
         for (ServerPlayer player : space.level.getServer().getPlayerList().getPlayers()) {
             if (player.level() != space.level) continue;
+            if (PLAYERS.get(player.getUUID()) == space) continue;
             var inventory = player.getInventory();
             for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
                 if (space.id.equals(CanContents.spaceId(inventory.getItem(slot)))) count++;

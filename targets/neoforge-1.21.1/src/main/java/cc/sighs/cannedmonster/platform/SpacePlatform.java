@@ -233,6 +233,31 @@ public final class SpacePlatform {
         }
     }
 
+    /**
+     * A resident ejected into the real world was never paired by the vanilla tracker:
+     * its add was filtered while it was space-owned, but the tracker's seenBy already
+     * lists the player, so it never resends. Re-send the native pairing to everyone
+     * that still watches the entity.
+     */
+    public static void retrack(Entity entity) {
+        if (entity == null || entity.isRemoved() || !(entity.level() instanceof ServerLevel level)) return;
+        if (SpaceManager.trackedSpace(entity) != null) return;
+        for (ServerPlayer player : level.getChunkSource().chunkMap.getPlayersWatching(entity)) {
+            if (player == entity) continue;
+            player.connection.send(new ClientboundAddEntityPacket(entity.getId(), entity.getUUID(),
+                    entity.getX(), entity.getY(), entity.getZ(), entity.getXRot(), entity.getYRot(),
+                    entity.getType(), 0, entity.getDeltaMovement(), entity.getYHeadRot()));
+            player.connection.send(new ClientboundSetEntityDataPacket(entity.getId(),
+                    entity.getEntityData().getNonDefaultValues()));
+            if (entity instanceof LivingEntity living) {
+                List<Pair<EquipmentSlot, ItemStack>> slots = new ArrayList<>();
+                for (EquipmentSlot slot : EquipmentSlot.values()) slots.add(Pair.of(slot, living.getItemBySlot(slot)));
+                player.connection.send(new ClientboundSetEquipmentPacket(entity.getId(), slots));
+            }
+            entity.startSeenByPlayer(player);
+        }
+    }
+
     /** Per-tick client-space movement/rotation/head sync and visible-set reconciliation. */
     public static void sendEntityUpdates(ServerPlayer player, SpaceManager.Space space) {
         Map<Integer, Sent> sent = SENT.computeIfAbsent(player.getUUID(), key -> new HashMap<>());

@@ -80,8 +80,10 @@ public abstract class BaseCanItem extends Item {
         ItemStack stack = context.getItemInHand();
         if (spatial) {
             if (context.getLevel().isClientSide()) return InteractionResult.SUCCESS;
-            if (!(context.getPlayer() instanceof net.minecraft.server.level.ServerPlayer player)) return InteractionResult.FAIL;
-            return cc.sighs.cannedmonster.space.SpaceManager.enter(player, stack, context.getHand())
+            if (!(context.getPlayer() instanceof net.minecraft.server.level.ServerPlayer player)
+                    || !(context.getLevel() instanceof ServerLevel level)) return InteractionResult.FAIL;
+            Vec3 position = Vec3.atBottomCenterOf(context.getClickedPos().relative(context.getClickedFace()));
+            return cc.sighs.cannedmonster.space.SpaceManager.releaseLast(player, stack, level, position)
                     ? InteractionResult.CONSUME : InteractionResult.FAIL;
         }
         if (!CanContents.filled(stack)) return InteractionResult.PASS;

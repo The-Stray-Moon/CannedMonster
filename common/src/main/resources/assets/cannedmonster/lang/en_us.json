@@ -41,6 +41,8 @@
   "message.cannedmonster.space_capture_failed": "Could not admit the mob; changes rolled back",
   "message.cannedmonster.space_too_large": "That mob is too large for the room",
   "message.cannedmonster.space_captured": "Admitted %s into the virtual space",
+  "message.cannedmonster.space_released": "Released %s from the virtual space",
+  "message.cannedmonster.space_shattered": "The space can was destroyed; everything was ejected",
   "message.cannedmonster.space_recovered": "Recovered the lost space anchor as a can at its last position",
   "message.cannedmonster.space_anchor_present": "The space anchor still exists; recovery refused"
 }

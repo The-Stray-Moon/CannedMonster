@@ -108,6 +108,17 @@ neoForge {
             }
         }
 
+        spaceTest {
+            client()
+            gameDirectory = file('run-space-test')
+            programArgument '--username'
+            programArgument 'SpaceTester'
+            systemProperty 'autojs.port', '25587'
+            if (providers.gradleProperty('spaceTestHooks').isPresent()) {
+                systemProperty 'cannedmonster.spaceTestHooks', 'true'
+            }
+        }
+
         server {
             server()
             gameDirectory = file('run-server')

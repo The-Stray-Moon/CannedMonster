@@ -61,4 +61,11 @@ public abstract class SpaceEntityPositionMixin {
         Vec3 external = SpacePositions.external((Entity) (Object) this);
         if (external != null) cir.setReturnValue(external.z);
     }
+
+    /** A resident's enclosed room has no sky light, so daylight burning cannot trigger. */
+    @Inject(method = "getLightLevelDependentMagicValue", at = @At("HEAD"), cancellable = true)
+    private void cannedmonster$roomLight(CallbackInfoReturnable<Float> cir) {
+        Entity self = (Entity) (Object) this;
+        if (cc.sighs.cannedmonster.space.SpaceDomain.isolated(self)) cir.setReturnValue(0.0F);
+    }
 }

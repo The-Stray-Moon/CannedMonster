@@ -68,6 +68,7 @@ public final class CannedMonsterNeoForge121 {
                 cc.sighs.cannedmonster.fusion.visual.AppearanceSync.leave(event.getEntity()));
         NeoForge.EVENT_BUS.addListener((ServerStoppedEvent event) -> cc.sighs.cannedmonster.fusion.visual.AppearanceSync.stop());
         NeoForge.EVENT_BUS.addListener(this::canInteraction);
+        NeoForge.EVENT_BUS.addListener(this::canInteractionSpecific);
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) ->
                 cc.sighs.cannedmonster.space.SpaceManager.tick(event.getServer()));
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.server.ServerStartedEvent event) ->
@@ -105,21 +106,29 @@ public final class CannedMonsterNeoForge121 {
     }
 
     private void canInteraction(net.neoforged.neoforge.event.entity.player.PlayerInteractEvent.EntityInteract event) {
-        if (!(event.getItemStack().getItem() instanceof cc.sighs.cannedmonster.can.MonsterCanItem can)) return;
-        if (event.getEntity().isSpectator()) return;
-        net.minecraft.world.InteractionResult result = net.minecraft.world.InteractionResult.PASS;
-        if (!can.throwable() && can.spatial()) {
-            result = event.getTarget() instanceof net.minecraft.world.entity.Mob mob
-                    && event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player
-                    && cc.sighs.cannedmonster.space.SpaceManager.capture(player, mob, event.getItemStack())
-                    ? net.minecraft.world.InteractionResult.CONSUME : net.minecraft.world.InteractionResult.FAIL;
-        } else if (!can.throwable() && can.storesMobs()) {
-            result = event.getTarget() instanceof net.minecraft.world.entity.LivingEntity living
-                    ? can.interactLivingEntity(event.getItemStack(), event.getEntity(), living, event.getHand())
-                    : net.minecraft.world.InteractionResult.FAIL;
+        interact(event.getEntity(), event.getItemStack(), event.getTarget(), event.getHand(), event::setCancellationResult, event::setCanceled);
+    }
+
+    private void canInteractionSpecific(net.neoforged.neoforge.event.entity.player.PlayerInteractEvent.EntityInteractSpecific event) {
+        interact(event.getEntity(), event.getItemStack(), event.getTarget(), event.getHand(), event::setCancellationResult, event::setCanceled);
+    }
+
+    private void interact(net.minecraft.world.entity.player.Player player, net.minecraft.world.item.ItemStack stack,
+                          net.minecraft.world.entity.Entity target, net.minecraft.world.InteractionHand hand,
+                          java.util.function.Consumer<net.minecraft.world.InteractionResult> resultSetter,
+                          java.util.function.Consumer<Boolean> cancelSetter) {
+        if (!(stack.getItem() instanceof cc.sighs.cannedmonster.can.MonsterCanItem can)) return;
+        if (player.isSpectator() || can.throwable()) return;
+        net.minecraft.world.InteractionResult result;
+        if (target instanceof net.minecraft.world.entity.LivingEntity living) {
+            result = can.interactLivingEntity(stack, player, living, hand);
+        } else {
+            result = net.minecraft.world.InteractionResult.FAIL;
         }
-        event.setCancellationResult(result);
-        event.setCanceled(true);
+        // On the client a cancelled PASS would make vanilla try the item/air path and
+        // send a use packet, which is exactly how a mob capture used to enter the space.
+        resultSetter.accept(result);
+        cancelSetter.accept(true);
     }
 
     private void leave(EntityLeaveLevelEvent event) {
@@ -128,6 +137,9 @@ public final class CannedMonsterNeoForge121 {
             FusionRuntime.detach(mob);
         }
         Entity entity = event.getEntity();
+        if (entity instanceof net.minecraft.world.entity.item.ItemEntity item) {
+            cc.sighs.cannedmonster.space.SpaceManager.anchorItemRemoved(item, entity.getRemovalReason());
+        }
         if (!entity.level().isClientSide() && cc.sighs.cannedmonster.space.SpaceManager.isSpaceOwned(entity) && entity.isRemoved()) {
             // UNLOADED_TO_CHUNK, UNLOADED_WITH_PLAYER and CHANGED_DIMENSION are not
             // terminal: a resident riding a logging-out player must keep its ledger row.

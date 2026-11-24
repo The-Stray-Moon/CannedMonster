@@ -32,6 +32,12 @@ public abstract class SpaceWorldMixin {
         if (state != null) cir.setReturnValue(state);
     }
 
+    /** The room is roofed: precipitation inside it must not damage or extinguish entities. */
+    @Inject(method = "isRainingAt", at = @At("HEAD"), cancellable = true)
+    private void cannedmonster$roofedRain(BlockPos pos, CallbackInfoReturnable<Boolean> cir) {
+        if (SpaceDomain.roofed((Level) (Object) this, pos)) cir.setReturnValue(false);
+    }
+
     @Inject(method = "getBlockEntity", at = @At("HEAD"), cancellable = true)
     private void cannedmonster$virtualBlockEntity(BlockPos pos, CallbackInfoReturnable<BlockEntity> cir) {
         if (SpaceDomain.active((Level) (Object) this)) cir.setReturnValue(null);

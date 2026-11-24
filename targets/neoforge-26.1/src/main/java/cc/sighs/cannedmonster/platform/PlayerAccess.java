@@ -29,4 +29,8 @@ public final class PlayerAccess {
         if (player instanceof ServerPlayer server) server.sendSystemMessage(message, true);
         else player.sendSystemMessage(message);
     }
+
+    public static void syncInventory(Player player) {
+        if (player instanceof ServerPlayer server) server.inventoryMenu.broadcastChanges();
+    }
 }

@@ -68,6 +68,9 @@ public final class SpacePlatform {
 
     public static void sendResidents(ServerPlayer player, SpaceManager.Space space) {}
 
+    /** Space transport is unsupported here, so no resident can become a real world entity. */
+    public static void retrack(net.minecraft.world.entity.Entity entity) {}
+
     public static Packet<?> translateOutbound(ServerPlayer player, Packet<?> packet) { return packet; }
 
     public static boolean dropChunkPacket(ServerPlayer player, Packet<?> packet) { return false; }

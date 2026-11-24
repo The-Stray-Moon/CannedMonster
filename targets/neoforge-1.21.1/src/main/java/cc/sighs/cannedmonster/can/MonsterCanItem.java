@@ -24,10 +24,17 @@ public final class MonsterCanItem extends BaseCanItem {
     public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
         if (spatial()) {
-            if (level.isClientSide()) return InteractionResultHolder.success(stack);
+            if (level.isClientSide()) {
+                // Creative clients echo their predicted slot back to the server; clearing the
+                // local hand prevents that echo from restoring the can after entry.
+                player.setItemInHand(hand, ItemStack.EMPTY);
+                return InteractionResultHolder.success(ItemStack.EMPTY);
+            }
             if (!(player instanceof net.minecraft.server.level.ServerPlayer server)) return InteractionResultHolder.fail(stack);
+            // ServerPlayerGameMode writes the returned stack back into the hand. Returning
+            // the original stack would undo SpaceManager.enter clearing it.
             return cc.sighs.cannedmonster.space.SpaceManager.enter(server, stack, hand)
-                    ? InteractionResultHolder.success(stack) : InteractionResultHolder.fail(stack);
+                    ? InteractionResultHolder.success(ItemStack.EMPTY) : InteractionResultHolder.fail(stack);
         }
         return beginUse(level, player, hand) ? InteractionResultHolder.consume(stack) : InteractionResultHolder.pass(stack);
     }

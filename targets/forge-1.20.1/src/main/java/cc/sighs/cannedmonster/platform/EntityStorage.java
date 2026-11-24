@@ -21,6 +21,14 @@ public final class EntityStorage {
         return tag.getList(key, Tag.TAG_COMPOUND);
     }
 
+    public static ListTag stringList(CompoundTag tag, String key) {
+        return tag.getList(key, Tag.TAG_STRING);
+    }
+
+    public static boolean bool(CompoundTag tag, String key) {
+        return tag.getBoolean(key);
+    }
+
     public static int integer(CompoundTag tag, String key) {
         return tag.getInt(key);
     }
