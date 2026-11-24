@@ -12,6 +12,7 @@ import net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
 import net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket;
 import net.minecraft.network.protocol.game.ClientboundMoveEntityPacket;
+import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
 import net.minecraft.network.protocol.game.ClientboundBundlePacket;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
@@ -178,10 +179,6 @@ public final class SpacePlatform {
         return item == null ? ItemStack.EMPTY : new ItemStack(item);
     }
 
-    public static int maxY(ServerLevel level) {
-        return level.getMaxBuildHeight();
-    }
-
     public static boolean teleportPlayer(ServerPlayer player, ServerLevel level, Vec3 position, float yaw, float pitch) {
         player.teleportTo(level, position.x, position.y, position.z, yaw, pitch);
         return player.level() == level;
@@ -191,25 +188,14 @@ public final class SpacePlatform {
         SpaceDomain.raw(() -> player.connection.resetPosition());
     }
 
+    /**
+     * The client view owns the display room at its session-local origin; the server
+     * only switches it on. No real chunk is loaded or generated for the display.
+     */
     public static void sendRoom(ServerPlayer player, SpaceManager.Space space) {
-        ServerLevel level = space.level();
-        RoomGeometry room = space.client();
-        int chunkX = (int) room.x() >> 4;
-        int chunkZ = (int) room.z() >> 4;
-        ChunkPos pos = new ChunkPos(chunkX, chunkZ);
-        level.getChunk(chunkX, chunkZ, ChunkStatus.FULL, true);
-        LevelChunk chunk = new LevelChunk(level, pos);
-        for (int lx = 0; lx < RoomGeometry.SIZE_X; lx++) {
-            for (int ly = 0; ly < RoomGeometry.SIZE_Y; ly++) {
-                for (int lz = 0; lz < RoomGeometry.SIZE_Z; lz++) {
-                    BlockPos global = BlockPos.containing(room.x() + lx, room.y() + ly, room.z() + lz);
-                    chunk.setBlockState(global, room.blockLocal(lx, ly, lz), false);
-                }
-            }
-        }
         sendingRoom = true;
         try {
-            player.connection.send(new ClientboundLevelChunkWithLightPacket(chunk, level.getLightEngine(), null, null));
+            player.connection.send(new ClientboundCustomPayloadPacket(new SpaceRoomPayload(space.id(), space.generation(), true)));
         } finally {
             sendingRoom = false;
         }
@@ -393,11 +379,27 @@ public final class SpacePlatform {
         } finally {
             sendingEntities = false;
         }
-        RoomGeometry room = space.client();
-        int chunkX = (int) room.x() >> 4;
-        int chunkZ = (int) room.z() >> 4;
-        LevelChunk real = (LevelChunk) space.level().getChunk(chunkX, chunkZ, ChunkStatus.FULL, true);
-        player.connection.send(new ClientboundLevelChunkWithLightPacket(real, space.level().getLightEngine(), null, null));
+        sendingRoom = true;
+        try {
+            player.connection.send(new ClientboundCustomPayloadPacket(
+                    new SpaceRoomPayload(space.id(), space.advanceGeneration(), false)));
+            // Real block updates were dropped while the room was active; resend the
+            // player's real chunk (only if already loaded) so the real cache is current.
+            // Never send a chunk from the space level to a player who already left it:
+            // the packet's section layout belongs to that dimension.
+            Vec3 anchor = space.lastAnchor();
+            if (anchor != null && player.level() == space.level()) {
+                int cx = (int) Math.floor(anchor.x) >> 4;
+                int cz = (int) Math.floor(anchor.z) >> 4;
+                LevelChunk real = space.level().getChunkSource().getChunkNow(cx, cz);
+                if (real != null) {
+                    player.connection.send(new ClientboundLevelChunkWithLightPacket(real,
+                            space.level().getLightEngine(), null, null));
+                }
+            }
+        } finally {
+            sendingRoom = false;
+        }
     }
 
     public static Packet<?> translateOutbound(ServerPlayer player, Packet<?> packet) {
@@ -533,15 +535,6 @@ public final class SpacePlatform {
                         new Vec3(particles.getX(), particles.getY(), particles.getZ()));
             }
             return false;
-        }
-        RoomGeometry room = space.client();
-        int cx = (int) room.x() >> 4;
-        int cz = (int) room.z() >> 4;
-        if (packet instanceof ClientboundLevelChunkWithLightPacket chunk) {
-            return chunk.getX() == cx && chunk.getZ() == cz;
-        }
-        if (packet instanceof ClientboundForgetLevelChunkPacket forget) {
-            return forget.pos().x == cx && forget.pos().z == cz;
         }
         if (packet instanceof ClientboundSoundPacket sound) {
             Vec3 at = new Vec3(sound.getX(), sound.getY(), sound.getZ());

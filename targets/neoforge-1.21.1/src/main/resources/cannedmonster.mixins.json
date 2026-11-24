@@ -10,6 +10,6 @@
     "EntityTeleportMixin", "LivingEntityTeleportMixin", "ShulkerTeleportMixin",
     "RidingPhysicsMixin", "RidingEntityMixin", "RidingNetworkMixin", "NavigationQueryMixin", "PursuitTravelMixin", "FusionPhysiologyMixin", "PlayerBodyGuardMixin", "PlayerMemberRotationMixin", "PlayerMemberLookMixin", "PlayerMemberMobMixin", "FusionAttributeWriteMixin", "PlayerMemberBrainMixin", "PlayerFusionLogoutMixin", "PlayerSelfInteractMixin",
     "SpaceWorldMixin", "SpaceServerLevelMixin", "SpaceTickMixin", "SpacePacketMixin", "SpaceSendMixin", "SpaceEntitySaveMixin", "SpaceEntityPositionMixin", "SpacePickupMixin", "SpaceBroadcastMixin", "SpaceParticleMixin"],
-  "client": ["AppearanceWalkMixin", "FusionRenderDispatcherMixin", "FusionEntityRendererMixin", "PlayerFlightMoveMixin", "ClientMemberEventMixin", "MemberSoundMixin", "GuardianEffectMixin", "MemberModelPassMixin"],
+  "client": ["AppearanceWalkMixin", "ClientChunkCacheMixin", "SpaceClientPacketMixin", "SpaceClientDimensionMixin", "SpaceClientChunkDataMixin", "SpaceClientLightQueueMixin", "SpaceClientLightEngineMixin", "SpaceClientBiomeMixin", "SpaceClientLevelMixin", "FusionRenderDispatcherMixin", "FusionEntityRendererMixin", "PlayerFlightMoveMixin", "ClientMemberEventMixin", "MemberSoundMixin", "GuardianEffectMixin", "MemberModelPassMixin"],
   "injectors": { "defaultRequire": 1 }
 }

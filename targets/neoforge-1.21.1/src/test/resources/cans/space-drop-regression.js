@@ -33,6 +33,18 @@ function report() {
 function advance(next, ticks) { phase = next; wait = ticks || 0; report(); }
 function space() { return spaceId === null ? null : SM.spaceById(spaceId); }
 function canStack() { return new IS(BR.ITEM.get(RL.tryParse('cannedmonster:spatial_monster_can'))); }
+function holdCan() {
+    var inv = p.getInventory();
+    for (var i = 0; i < 9; i++) {
+        var stack = inv.getItem(i);
+        if (!stack.isEmpty() && CC.spaceId(stack) !== null) {
+            inv.selected = i;
+            p.inventoryMenu.broadcastChanges();
+            return stack;
+        }
+    }
+    return IS.EMPTY;
+}
 function entityAt(uuid) {
     var s = space();
     return s === null ? null : SM.findEntity(s, uuid);
@@ -67,6 +79,9 @@ function step() {
         var can = canStack();
         p.getInventory().setItem(0, can);
         p.inventoryMenu.broadcastChanges();
+        var leftovers = level.getEntitiesOfClass(ItemEntity, new AB(p.getX() - 12, p.getY() - 8, p.getZ() - 12,
+            p.getX() + 12, p.getY() + 8, p.getZ() + 12));
+        for (var k = 0; k < leftovers.size(); k++) leftovers.get(k).discard();
         var old = level.getEntitiesOfClass(Mob, new AB(p.getX() - 12, p.getY() - 8, p.getZ() - 12,
             p.getX() + 12, p.getY() + 8, p.getZ() + 12));
         for (var i = 0; i < old.size(); i++) {
@@ -121,8 +136,9 @@ function step() {
         item = findDrop();
         if (item === null) {
             // Already picked up (e.g. the drop landed on the player).
-            check('can returned to hand', !p.getMainHandItem().isEmpty());
-            check('can count kept', CC.spaceCount(p.getMainHandItem()) === 2);
+            var held = holdCan();
+            check('can returned to inventory', !held.isEmpty());
+            check('can count kept', CC.spaceCount(held) === 2);
             advance('enter', 2);
             return;
         }
@@ -140,14 +156,15 @@ function step() {
             return;
         }
         check('drop was picked up', findDrop() === null);
-        check('can returned to hand', !p.getMainHandItem().isEmpty());
-        check('can count kept', CC.spaceCount(p.getMainHandItem()) === 2);
+        var held = holdCan();
+        check('can returned to inventory', !held.isEmpty());
+        check('can count kept', CC.spaceCount(held) === 2);
         check('resident data kept', space() !== null && space().residents().size() === 2);
         advance('enter', 2);
         return;
     }
     if (phase === 'enter') {
-        var can = p.getMainHandItem();
+        var can = holdCan();
         check('enter succeeds', SM.enter(p, can, IH.MAIN_HAND));
         check('player inside', SM.isInside(p));
         check('two residents after enter', space().residents().size() === 2);
@@ -166,14 +183,14 @@ function step() {
         return;
     }
     if (phase === 'exit') {
-        var can = p.getMainHandItem();
+        var can = holdCan();
         check('exit returns a can', !can.isEmpty());
         check('count still two after exit', CC.spaceCount(can) === 2);
         advance('releaseOne', 1);
         return;
     }
     if (phase === 'releaseOne') {
-        var can = p.getMainHandItem();
+        var can = holdCan();
         var pos = new V(p.getX(), p.getY(), p.getZ());
         var released = SM.releaseLast(p, can, level, pos);
         check('first release succeeds', released);
@@ -191,7 +208,7 @@ function step() {
         return;
     }
     if (phase === 'releaseTwo') {
-        var can = p.getMainHandItem();
+        var can = holdCan();
         var pos = new V(p.getX(), p.getY(), p.getZ());
         check('second release succeeds', SM.releaseLast(p, can, level, pos));
         check('count cleared', CC.spaceCount(can) === 0 && CC.spaceId(can) === null);

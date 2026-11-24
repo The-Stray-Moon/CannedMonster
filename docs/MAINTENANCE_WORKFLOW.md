@@ -57,7 +57,7 @@
 
 本目标不再通过 NeoForge coremod 接入。外层发布 jar 只放启动期 `ITransformationService`、`IModFileCandidateLocator` 和 ASM 实现；游戏代码与资源放在 `META-INF/cannedmonster/game.jar`，由 locator 交给 NeoForge 正常扫描 metadata、Mixin 与依赖。不能把外层游戏类重新混入 SERVICE 层，也不能把启动服务仅放到 GAME 层的嵌套库中。
 
-`runClient` / `runServer` 的前置任务 `prepareAsmRun` 管理 run/mods 下的 `cannedmonster-asm-dev.jar` 与 `cannedmonster-packaged.jar`，根据 `-PverifyPackagedMod` 互斥安装；其他 mods 文件不自动清理。成品模式禁用源码模组，并从 `RunGameTask.classpathProvider` 排除开发输出。启动参数不需要 Java Agent。构建后检查外层服务注册、内层 metadata/资源以及两层无重复游戏包，再分别验证开发入口和成品入口；启动成功不能代替融合行为验证。
+`runClient` / `runServer` / `runSpaceTest` / `runClient2` 的前置任务 `prepareAsmRun` 管理各自 run 目录 `mods` 下的 `cannedmonster-asm-dev.jar` 与 `cannedmonster-packaged.jar`，根据 `-PverifyPackagedMod` 互斥安装；开发模式会为所有 run 目录写入启动服务 jar（专用服务器没有它会在模组构造时报 “Fusion binding slots were not installed”），只清理这两个任务专用文件，其他 mods 文件不自动清理。成品模式禁用源码模组，并从 `RunGameTask.classpathProvider` 排除开发输出。启动参数不需要 Java Agent。构建后检查外层服务注册、内层 metadata/资源以及两层无重复游戏包，再分别验证开发入口和成品入口；启动成功不能代替融合行为验证。
 
 Forge 1.20.1 使用 `net.neoforged.moddev.legacyforge`、JDK 17 toolchain 和 SRG 运行时。Mixin 由 MDG 的 `mixin` 扩展生成 refmap（必须有 `annotationProcessor`），ASM 服务通过 ModLauncher `ITransformationService` 接入；扫描与调度必须兼容 1.20.1 SRG 名称。发布/成品验证是两个文件：普通游戏 jar 和 `cannedmonster-bootstrap.jar`。单 jar 会被 ModLauncher 排除出普通模组发现，导致 Mixin 配置在早期不可读。`prepareAsmRun` 在开发运行只放 bootstrap jar，`-PverifyPackagedMod` 同时放游戏 jar 与 bootstrap jar。集成服客户端已验证；专用服务器、投掷/随机/战利品/派生/骑乘/传送等完整矩阵仍未完成。`common` 独立构建以 NeoForge 1.21.1 为主类路径，Forge 1.20.1 的差异由编译期平台适配和显式 API 胶水源码集处理，业务核心不排除。
 

@@ -43,6 +43,8 @@ import java.util.UUID;
  */
 public final class SpaceManager {
     private static final Logger LOGGER = LogUtils.getLogger();
+    private static final RoomGeometry CLIENT_ROOM = new RoomGeometry(0, 0, 0);
+    private static long GENERATION;
     private static final Map<UUID, Space> SPACES = new HashMap<>();
     private static final Map<UUID, Space> PLAYERS = new HashMap<>();
     private static final Map<UUID, Space> RESIDENTS = new HashMap<>();
@@ -81,6 +83,7 @@ public final class SpaceManager {
         private boolean destroyPending;
         private int destroyTicks;
         private String anchorState = "UNKNOWN";
+        private long generation;
 
         private Space(UUID id, ServerLevel level, RoomGeometry internal, RoomGeometry client, int anchorChunkX, int anchorChunkZ) {
             this.id = id;
@@ -103,6 +106,8 @@ public final class SpaceManager {
         public Map<UUID, CompoundTag> derived() { return derivedData; }
         public java.util.List<UUID> residentOrder() { return residentOrder; }
         public boolean destroyPending() { return destroyPending; }
+        public long generation() { return generation; }
+        public long advanceGeneration() { return generation = ++GENERATION; }
     }
 
     public static boolean enter(ServerPlayer player, ItemStack stack, InteractionHand hand) {
@@ -150,6 +155,7 @@ public final class SpaceManager {
         forceAnchorTicket(space, anchor);
         PLAYERS.put(player.getUUID(), space);
         SAVED_PLAYERS.put(player.getUUID(), space);
+        space.advanceGeneration();
         SpacePlatform.beginSession(player);
         SpacePlatform.sendRoom(player, space);
         SpacePlatform.sendResidents(player, space);
@@ -218,7 +224,10 @@ public final class SpaceManager {
         if (player.level() != space.level) {
             PLAYERS.put(player.getUUID(), space);
             SAVED_PLAYERS.put(player.getUUID(), space);
+            // restoreRoom already advanced the generation; re-open with a newer one.
+            space.advanceGeneration();
             SpacePlatform.sendRoom(player, space);
+            SpacePlatform.sendResidents(player, space);
             Vec3 spawn = space.internal.spawn();
             SpaceDomain.push(player);
             try {
@@ -1020,6 +1029,7 @@ public final class SpaceManager {
         if (space == null || PLAYERS.containsKey(player.getUUID())) return;
         forceRoom(space);
         PLAYERS.put(player.getUUID(), space);
+        space.advanceGeneration();
         SpacePlatform.beginSession(player);
         SpacePlatform.sendRoom(player, space);
         SpacePlatform.sendResidents(player, space);
@@ -1372,8 +1382,8 @@ public final class SpaceManager {
                 }
                 RoomGeometry internal = new RoomGeometry(EntityStorage.decimal(roomTag, "InternalX"),
                         EntityStorage.decimal(roomTag, "InternalY"), EntityStorage.decimal(roomTag, "InternalZ"));
-                RoomGeometry client = new RoomGeometry(EntityStorage.decimal(roomTag, "ClientX"),
-                        EntityStorage.decimal(roomTag, "ClientY"), EntityStorage.decimal(roomTag, "ClientZ"));
+                // Older saves stored a real sky slot; the client view is session-local now.
+                RoomGeometry client = CLIENT_ROOM;
                 Space space = new Space(id, level, internal, client, 0, 0);
                 String anchorItem = EntityStorage.string(roomTag, "AnchorItem");
                 if (!anchorItem.isEmpty()) space.anchorItem = UUID.fromString(anchorItem);
@@ -1474,8 +1484,7 @@ public final class SpaceManager {
         // An id that belongs to an unparsable ledger record must not be re-created:
         // writing a second record with the same id would make the ledger ambiguous.
         if (id != null && hasOrphan(id.toString())) return null;
-        int clientY = Math.min(300, SpacePlatform.maxY(level) - 16);
-        RoomGeometry client = clientRoom(level, clientY);
+        RoomGeometry client = clientRoomGeometry();
         RoomGeometry internal = internalRoom(level, player.position());
         UUID spaceId = id == null ? UUID.randomUUID() : id;
         int chunkX = Math.floorDiv((int) Math.floor(player.getX()), 16);
@@ -1488,20 +1497,15 @@ public final class SpaceManager {
         return space;
     }
 
-    /** Every space gets its own client display slot; two players never share a fake room. */
-    private static RoomGeometry clientRoom(ServerLevel level, int clientY) {
-        for (int slot = 0; slot < 256; slot++) {
-            RoomGeometry candidate = new RoomGeometry(16 + (slot % 16) * 32, clientY, 16 + (slot / 16) * 32);
-            boolean used = false;
-            for (Space other : SPACES.values()) {
-                if (other.level == level && other.client.x() == candidate.x() && other.client.z() == candidate.z()) {
-                    used = true;
-                    break;
-                }
-            }
-            if (!used) return candidate;
-        }
-        return new RoomGeometry(16, clientY, 16);
+    /**
+     * The client display room is a session-local coordinate space owned by the client
+     * space view; it is not a real world slot. Every space uses the same local origin
+     * (identity comes from the session), so no sky/height slot and no per-space chunk
+     * generation is needed. Real chunks at these coordinates are hidden by the client
+     * data-source mixins while the space is active.
+     */
+    public static RoomGeometry clientRoomGeometry() {
+        return CLIENT_ROOM;
     }
 
     private static RoomGeometry internalRoom(ServerLevel level, Vec3 anchor) {

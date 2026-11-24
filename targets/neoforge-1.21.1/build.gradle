@@ -56,14 +56,22 @@ def packagedRun = providers.gradleProperty('verifyPackagedMod').isPresent()
 def prepareAsmRun = tasks.register('prepareAsmRun') {
     dependsOn(packagedRun ? tasks.named('jar') : bootstrapJar)
     doLast {
-        def mods = file('run/mods')
-        mods.mkdirs()
-        delete new File(mods, packagedRun ? 'cannedmonster-asm-dev.jar' : 'cannedmonster-packaged.jar')
-        delete new File(mods, packagedRun ? 'fusion-asm-dev.jar' : 'cannedmonster-packaged.jar')
-        copy {
-            from(packagedRun ? tasks.named('jar').get().archiveFile : bootstrapJar.get().archiveFile)
-            into mods
-            rename { packagedRun ? 'cannedmonster-packaged.jar' : 'cannedmonster-asm-dev.jar' }
+        // Every run target uses its own game directory, so the service-layer jar must
+        // be present in each one. Only one of the two artifacts is kept per directory;
+        // a packaged jar left in another directory is never loaded by a dev run and is
+        // removed by the next prepareAsmRun in dev mode.
+        def dirs = [file('run'), file('run-server'), file('run-space-test'), file('run-client2')]
+        for (def dir : dirs) {
+            def mods = new File(dir, 'mods')
+            mods.mkdirs()
+            delete new File(mods, 'cannedmonster-asm-dev.jar')
+            delete new File(mods, 'fusion-asm-dev.jar')
+            delete new File(mods, 'cannedmonster-packaged.jar')
+            copy {
+                from(packagedRun ? tasks.named('jar').get().archiveFile : bootstrapJar.get().archiveFile)
+                into mods
+                rename { packagedRun ? 'cannedmonster-packaged.jar' : 'cannedmonster-asm-dev.jar' }
+            }
         }
     }
 }

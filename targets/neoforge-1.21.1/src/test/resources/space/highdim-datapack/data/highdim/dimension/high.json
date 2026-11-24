@@ -1,0 +1,12 @@
+{
+  "type": "highdim:high",
+  "generator": {
+    "type": "minecraft:flat",
+    "settings": {
+      "layers": [],
+      "biome": "minecraft:swamp",
+      "features": false,
+      "lakes": false
+    }
+  }
+}

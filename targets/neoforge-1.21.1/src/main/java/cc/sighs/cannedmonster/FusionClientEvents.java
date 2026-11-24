@@ -46,7 +46,13 @@ public final class FusionClientEvents {
     }
 
     @SubscribeEvent
+    public static void logout(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingOut event) {
+        cc.sighs.cannedmonster.space.SpaceClientView.reset();
+    }
+
+    @SubscribeEvent
     public static void tick(ClientTickEvent.Post event) {
+        cc.sighs.cannedmonster.space.SpaceClientView.tick();
         ClientAppearance.tick();
         ClientRiding.tick();
     }

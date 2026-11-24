@@ -54,7 +54,6 @@ public final class SpacePlatform {
 
     public static net.minecraft.world.item.ItemStack spatialCan() { return net.minecraft.world.item.ItemStack.EMPTY; }
 
-    public static int maxY(ServerLevel level) { return level.getMaxBuildHeight(); }
 
     public static void resetMovement(ServerPlayer player) {}
 

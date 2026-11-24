@@ -45,6 +45,11 @@ public final class CannedMonsterNeoForge121 {
                 event.registrar("3").playToClient(cc.sighs.cannedmonster.fusion.visual.MemberEvent.TYPE,
                         cc.sighs.cannedmonster.fusion.visual.MemberEvent.CODEC,
                         (packet, context) -> cc.sighs.cannedmonster.fusion.visual.ClientAppearance.receive(packet)));
+        modBus.addListener((net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent event) ->
+                event.registrar("3").playToClient(cc.sighs.cannedmonster.platform.SpaceRoomPayload.TYPE,
+                        cc.sighs.cannedmonster.platform.SpaceRoomPayload.CODEC,
+                        (packet, context) -> context.enqueueWork(
+                                () -> cc.sighs.cannedmonster.space.SpaceClientView.receive(packet))));
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.tick.EntityTickEvent.Post event) ->
                 cc.sighs.cannedmonster.fusion.RidingSync.tick(event.getEntity()));
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.tick.EntityTickEvent.Post event) ->
