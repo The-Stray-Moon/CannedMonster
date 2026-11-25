@@ -1,0 +1,433 @@
+{
+	"phase": "done",
+	"done": true,
+	"ok": true,
+	"checks": [
+		{
+			"name": "no screen before open",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "editor screen open",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "editor state installed",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "can A still filled",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "actual legacy layout available",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "initial editor layout equals legacy fit",
+			"pass": true,
+			"detail": "actual=VisualLayout[layers=[Layer[height=1.0, visible=true, offset=V[x=0.0, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=2.25, y=2.0, z=2.25]], Layer[height=1.0, visible=true, offset=V[x=0.0, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=1.0, y=1.0, z=1.0]]], planes=[Plane[position=0.5, origin=V[x=0.0, y=0.5, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0]]]] expected=VisualLayout[layers=[Layer[height=1.0, visible=true, offset=V[x=0.0, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=2.25, y=2.0, z=2.25]], Layer[height=1.0, visible=true, offset=V[x=0.0, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=1.0, y=1.0, z=1.0]]], planes=[Plane[position=0.5, origin=V[x=0.0, y=0.5, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0]]]]"
+		},
+		{
+			"name": "initial editor is not dirty",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "opening writes no item default",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "opening writes no embedded layout",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "editing marks dirty",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "reset selected unit scale",
+			"pass": true,
+			"detail": "V[x=1.0, y=1.0, z=1.0]"
+		},
+		{
+			"name": "reset selected zero rotation",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "reset selected zero offset",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "reset plane zero origin",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "reset plane zero rotation",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "reset all equals unit legacy count",
+			"pass": true,
+			"detail": "VisualLayout[layers=[Layer[height=1.0, visible=true, offset=V[x=0.0, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=1.0, y=1.0, z=1.0]], Layer[height=1.0, visible=true, offset=V[x=0.0, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=1.0, y=1.0, z=1.0]]], planes=[Plane[position=0.5, origin=V[x=0.0, y=0.5, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0]]]]"
+		},
+		{
+			"name": "reset all layer 0 unit",
+			"pass": true,
+			"detail": "V[x=1.0, y=1.0, z=1.0]"
+		},
+		{
+			"name": "reset all layer 1 unit",
+			"pass": true,
+			"detail": "V[x=1.0, y=1.0, z=1.0]"
+		},
+		{
+			"name": "dirty close test is dirty",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "escape asks before discard",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "discard prompt open",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "discard closes editor",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "discard writes no item default",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "discard writes no embedded layout",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "main hand selected",
+			"pass": true,
+			"detail": "0"
+		},
+		{
+			"name": "main hand can filled",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "fresh F initial layout equals legacy fit",
+			"pass": true,
+			"detail": "actual=VisualLayout[layers=[Layer[height=1.0, visible=true, offset=V[x=0.0, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=2.25, y=2.0, z=2.25]], Layer[height=1.0, visible=true, offset=V[x=0.0, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=1.0, y=1.0, z=1.0]]], planes=[Plane[position=0.5, origin=V[x=0.0, y=0.5, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0]]]] expected=VisualLayout[layers=[Layer[height=1.0, visible=true, offset=V[x=0.0, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=2.25, y=2.0, z=2.25]], Layer[height=1.0, visible=true, offset=V[x=0.0, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=1.0, y=1.0, z=1.0]]], planes=[Plane[position=0.5, origin=V[x=0.0, y=0.5, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0]]]]"
+		},
+		{
+			"name": "save menu opened for scope 3",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "scope 3 keeps the editor open",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "refresh inventory opened",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "refresh inventory closed",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "main hand selected",
+			"pass": true,
+			"detail": "0"
+		},
+		{
+			"name": "main hand can filled",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "scope precedence before save 2",
+			"pass": true,
+			"detail": "actual=VisualLayout[layers=[Layer[height=1.0, visible=true, offset=V[x=0.05, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=2.25, y=2.0, z=2.25]], Layer[height=1.0, visible=true, offset=V[x=0.0, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=1.0, y=1.0, z=1.0]]], planes=[Plane[position=0.5, origin=V[x=0.0, y=0.5, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0]]]] expected=VisualLayout[layers=[Layer[height=1.0, visible=true, offset=V[x=0.05, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=2.25, y=2.0, z=2.25]], Layer[height=1.0, visible=true, offset=V[x=0.0, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=1.0, y=1.0, z=1.0]]], planes=[Plane[position=0.5, origin=V[x=0.0, y=0.5, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0]]]]"
+		},
+		{
+			"name": "save menu opened for scope 2",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "scope 2 keeps the editor open",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "refresh inventory opened",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "refresh inventory closed",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "main hand selected",
+			"pass": true,
+			"detail": "0"
+		},
+		{
+			"name": "main hand can filled",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "scope precedence before save 1",
+			"pass": true,
+			"detail": "actual=VisualLayout[layers=[Layer[height=1.0, visible=true, offset=V[x=0.1, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=2.25, y=2.0, z=2.25]], Layer[height=1.0, visible=true, offset=V[x=0.0, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=1.0, y=1.0, z=1.0]]], planes=[Plane[position=0.5, origin=V[x=0.0, y=0.5, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0]]]] expected=VisualLayout[layers=[Layer[height=1.0, visible=true, offset=V[x=0.1, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=2.25, y=2.0, z=2.25]], Layer[height=1.0, visible=true, offset=V[x=0.0, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=1.0, y=1.0, z=1.0]]], planes=[Plane[position=0.5, origin=V[x=0.0, y=0.5, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0]]]]"
+		},
+		{
+			"name": "save menu opened for scope 1",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "scope 1 keeps the editor open",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "refresh inventory opened",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "refresh inventory closed",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "main hand selected",
+			"pass": true,
+			"detail": "0"
+		},
+		{
+			"name": "main hand can filled",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "scope precedence before save 0",
+			"pass": true,
+			"detail": "actual=VisualLayout[layers=[Layer[height=1.0, visible=true, offset=V[x=0.15, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=2.25, y=2.0, z=2.25]], Layer[height=1.0, visible=true, offset=V[x=0.0, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=1.0, y=1.0, z=1.0]]], planes=[Plane[position=0.5, origin=V[x=0.0, y=0.5, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0]]]] expected=VisualLayout[layers=[Layer[height=1.0, visible=true, offset=V[x=0.15, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=2.25, y=2.0, z=2.25]], Layer[height=1.0, visible=true, offset=V[x=0.0, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=1.0, y=1.0, z=1.0]]], planes=[Plane[position=0.5, origin=V[x=0.0, y=0.5, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0]]]]"
+		},
+		{
+			"name": "save menu opened for scope 0",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "scope 0 keeps the editor open",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "refresh inventory opened",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "refresh inventory closed",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "main hand selected",
+			"pass": true,
+			"detail": "0"
+		},
+		{
+			"name": "main hand can filled",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "embedded layout wins precedence",
+			"pass": true,
+			"detail": "actual=VisualLayout[layers=[Layer[height=1.0, visible=true, offset=V[x=0.2, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=2.25, y=2.0, z=2.25]], Layer[height=1.0, visible=true, offset=V[x=0.0, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=1.0, y=1.0, z=1.0]]], planes=[Plane[position=0.5, origin=V[x=0.0, y=0.5, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0]]]] embedded=VisualLayout[layers=[Layer[height=1.0, visible=true, offset=V[x=0.2, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=2.25, y=2.0, z=2.25]], Layer[height=1.0, visible=true, offset=V[x=0.0, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=1.0, y=1.0, z=1.0]]], planes=[Plane[position=0.5, origin=V[x=0.0, y=0.5, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0]]]]"
+		},
+		{
+			"name": "refresh inventory opened",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "refresh inventory closed",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "main hand selected for release",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "F filled before release",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "release inventory closed",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "release empties the can",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "released body visible",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "recapture inventory closed",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "recapture refills F",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "recapture keeps embedded layout",
+			"pass": true,
+			"detail": "VisualLayout[layers=[Layer[height=1.0, visible=true, offset=V[x=0.2, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=2.25, y=2.0, z=2.25]], Layer[height=1.0, visible=true, offset=V[x=0.0, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=1.0, y=1.0, z=1.0]]], planes=[Plane[position=0.5, origin=V[x=0.0, y=0.5, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0]]]]"
+		},
+		{
+			"name": "recapture keeps item default",
+			"pass": true,
+			"detail": "VisualLayout[layers=[Layer[height=1.0, visible=true, offset=V[x=0.15, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=2.25, y=2.0, z=2.25]], Layer[height=1.0, visible=true, offset=V[x=0.0, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=1.0, y=1.0, z=1.0]]], planes=[Plane[position=0.5, origin=V[x=0.0, y=0.5, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0]]]]"
+		},
+		{
+			"name": "inventory opened",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "F slot present",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "F can is filled",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "embedded layout survives recapture",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "item default survives recapture",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "tooltip image present",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "tooltip preview host",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "tooltip preview host still present",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "tooltip preview clock advances",
+			"pass": true,
+			"detail": "70320 -> 70360"
+		},
+		{
+			"name": "empty slot present",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "empty can has no host",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "ordinary slot present",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "ordinary can host",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "random can has no contents",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "random can has no host",
+			"pass": true,
+			"detail": ""
+		},
+		{
+			"name": "inventory closed",
+			"pass": true,
+			"detail": ""
+		}
+	],
+	"diffs": {
+		"tooltip": -1,
+		"empty": -1,
+		"plain": -1
+	},
+	"tooltipClock": {
+		"first": 70320,
+		"second": 70360
+	},
+	"scopes": {
+		"server": "VisualLayout[layers=[Layer[height=1.0, visible=true, offset=V[x=0.05, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=2.25, y=2.0, z=2.25]], Layer[height=1.0, visible=true, offset=V[x=0.0, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=1.0, y=1.0, z=1.0]]], planes=[Plane[position=0.5, origin=V[x=0.0, y=0.5, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0]]]]",
+		"player": "VisualLayout[layers=[Layer[height=1.0, visible=true, offset=V[x=0.1, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=2.25, y=2.0, z=2.25]], Layer[height=1.0, visible=true, offset=V[x=0.0, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=1.0, y=1.0, z=1.0]]], planes=[Plane[position=0.5, origin=V[x=0.0, y=0.5, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0]]]]",
+		"item": "VisualLayout[layers=[Layer[height=1.0, visible=true, offset=V[x=0.15, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=2.25, y=2.0, z=2.25]], Layer[height=1.0, visible=true, offset=V[x=0.0, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=1.0, y=1.0, z=1.0]]], planes=[Plane[position=0.5, origin=V[x=0.0, y=0.5, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0]]]]",
+		"individual": "VisualLayout[layers=[Layer[height=1.0, visible=true, offset=V[x=0.2, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=2.25, y=2.0, z=2.25]], Layer[height=1.0, visible=true, offset=V[x=0.0, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=1.0, y=1.0, z=1.0]]], planes=[Plane[position=0.5, origin=V[x=0.0, y=0.5, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0]]]]",
+		"legacyA": "VisualLayout[layers=[Layer[height=1.0, visible=true, offset=V[x=0.0, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=2.25, y=2.0, z=2.25]], Layer[height=1.0, visible=true, offset=V[x=0.0, y=0.0, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0], scale=V[x=1.0, y=1.0, z=1.0]]], planes=[Plane[position=0.5, origin=V[x=0.0, y=0.5, z=0.0], rotation=V[x=0.0, y=0.0, z=0.0]]]]"
+	}
+}

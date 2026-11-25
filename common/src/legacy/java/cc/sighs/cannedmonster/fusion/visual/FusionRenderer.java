@@ -13,7 +13,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class FusionRenderer {
-    private static final SliceBuffers SLICES = new SliceBuffers(new Matrix4f(), 0, 0);
+    private static final SliceBuffers SLICES = new SliceBuffers(new Matrix4f(),
+            VisualGeometry.Cut.unbounded(), VisualGeometry.Cut.unbounded());
     private static LivingEntity body;
     private static MultiBufferSource originalBuffers;
     private static boolean effects;
@@ -69,6 +70,10 @@ public final class FusionRenderer {
         }
         List<LivingEntity> members = new ArrayList<>(facets);
         members.add(host);
+        VisualLayout layout = VisualGeometry.aligned(VisualViews.layout(host), members.size(),
+                () -> VisualLayout.legacy(members));
+        float width = Math.max(0.01F, host.getBbWidth());
+        float height = Math.max(0.01F, host.getBbHeight());
         Matrix4f inverse = new Matrix4f(poses.last().pose()).invert();
         List<Integer> counts = new ArrayList<>();
         body = host;
@@ -76,20 +81,21 @@ public final class FusionRenderer {
         try {
             for (int i = 0; i < members.size(); i++) {
                 LivingEntity member = members.get(i);
+                VisualLayout.Layer layer = layout.layers().get(i);
+                if (!layer.visible()) {
+                    counts.add(0);
+                    continue;
+                }
                 if (member != host) ClientAppearance.pose((Mob) member, host);
-                float height = Math.max(0.01F, host.getBbHeight());
-                float lower = i == members.size() - 1 ? Float.NEGATIVE_INFINITY : height * (members.size() - i - 1) / members.size();
-                float upper = i == 0 ? Float.POSITIVE_INFINITY : height * (members.size() - i) / members.size();
                 SliceBuffers sliced = SLICES;
-                sliced.reset(inverse, lower, upper);
+                sliced.reset(inverse, VisualGeometry.lower(layout, i, width, height),
+                        VisualGeometry.upper(layout, i, width, height));
                 poses.pushPose();
                 try {
-                    if (member != host) {
-                        float scaleY = height / Math.max(0.01F, member.getBbHeight());
-                        float scaleXZ = Math.max(0.01F, host.getBbWidth()) / Math.max(0.01F, member.getBbWidth());
-                        poses.scale(scaleXZ, scaleY, scaleXZ);
-                    }
-                    EntityRenderer memberRenderer = member == host ? renderer : Minecraft.getInstance().getEntityRenderDispatcher().getRenderer(member);
+                    VisualGeometry.applyPose(poses, layer, width, height,
+                            VisualGeometry.bandFloor(layout, i));
+                    EntityRenderer memberRenderer = member == host ? renderer
+                            : Minecraft.getInstance().getEntityRenderDispatcher().getRenderer(member);
                     memberRenderer.render(member, yaw, partialTick, poses, sliced, light);
                 } finally {
                     poses.popPose();

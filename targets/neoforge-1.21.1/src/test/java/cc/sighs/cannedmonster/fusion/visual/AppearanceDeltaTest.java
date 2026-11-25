@@ -33,8 +33,12 @@ class AppearanceDeltaTest {
     }
 
     private static FusionAppearance state(long revision, int number, boolean flying) {
+        return state(revision, number, flying, null);
+    }
+
+    private static FusionAppearance state(long revision, int number, boolean flying, VisualLayout layout) {
         return new FusionAppearance(1, BODY, -1, flying, revision, true, List.of(new FusionAppearance.Member(MEMBER,
-                ResourceLocation.withDefaultNamespace("pig"), List.of(value(0, number), value(1, 4)), new CompoundTag())));
+                ResourceLocation.withDefaultNamespace("pig"), List.of(value(0, number), value(1, 4)), new CompoundTag())), layout);
     }
 
     @Test
@@ -57,8 +61,28 @@ class AppearanceDeltaTest {
 
     @Test
     void compositionReplacementRequiresAFullSnapshot() {
-        var replacement = new FusionAppearance(1, BODY, -1, false, 2, true, List.of());
+        var replacement = new FusionAppearance(1, BODY, -1, false, 2, true, List.of(), null);
         assertSame(replacement, AppearanceSync.delta(state(1, 3, false), replacement));
+    }
+
+    @Test
+    void layoutChangesTravelWithDeltasInsteadOfFullSnapshots() {
+        VisualLayout first = VisualLayout.reset(1);
+        VisualLayout second = VisualLayout.reset(2);
+        var delta = AppearanceSync.delta(state(1, 3, false, first), state(2, 3, false, second));
+        assertNotNull(delta);
+        assertFalse(delta.full());
+        assertEquals(second, delta.layout());
+        assertTrue(delta.members().getFirst().data().isEmpty());
+    }
+
+    @Test
+    void unchangedLayoutsStayOutOfDeltas() {
+        VisualLayout layout = VisualLayout.reset(2);
+        assertNull(AppearanceSync.delta(state(1, 3, false, layout), state(2, 3, false, layout)));
+        var revisionOnly = AppearanceSync.delta(state(1, 3, false, layout), state(2, 3, true, layout));
+        assertNotNull(revisionOnly);
+        assertNull(revisionOnly.layout());
     }
 
     @Test
@@ -76,12 +100,22 @@ class AppearanceDeltaTest {
     @Test
     void codecCarriesFullAndDeltaFlags() {
         for (boolean full : List.of(true, false)) {
-            var packet = new FusionAppearance(1, BODY, -1, true, 99, full, List.of());
+            var packet = new FusionAppearance(1, BODY, -1, true, 99, full, List.of(), VisualLayout.reset(2));
             RegistryFriendlyByteBuf buffer = new RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY);
             try {
                 FusionAppearance.CODEC.encode(buffer, packet);
                 assertEquals(packet, FusionAppearance.CODEC.decode(buffer));
             } finally { buffer.release(); }
         }
+    }
+
+    @Test
+    void codecKeepsMissingLayoutsMissing() {
+        var packet = new FusionAppearance(1, BODY, -1, false, 7, false, List.of(), null);
+        RegistryFriendlyByteBuf buffer = new RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY);
+        try {
+            FusionAppearance.CODEC.encode(buffer, packet);
+            assertEquals(packet, FusionAppearance.CODEC.decode(buffer));
+        } finally { buffer.release(); }
     }
 }

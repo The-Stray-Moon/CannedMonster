@@ -7,7 +7,7 @@ import org.joml.Matrix4f;
  * are converted to sliced custom geometry by {@code SubmitNodeSliceMixin}.
  */
 public final class SliceContext {
-    public record Band(Matrix4f inverse, float lower, float upper) {}
+    public record Band(Matrix4f inverse, VisualGeometry.Cut lower, VisualGeometry.Cut upper) {}
 
     private static final ThreadLocal<Band> CURRENT = new ThreadLocal<>();
 

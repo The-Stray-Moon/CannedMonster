@@ -2,6 +2,8 @@ package cc.sighs.cannedmonster.can;
 
 import cc.sighs.cannedmonster.fusion.BodyLinks;
 import cc.sighs.cannedmonster.fusion.FusionRuntime;
+import cc.sighs.cannedmonster.fusion.visual.VisualEditorServer;
+import cc.sighs.cannedmonster.fusion.visual.VisualLayoutResolver;
 import cc.sighs.cannedmonster.platform.EntityStorage;
 import cc.sighs.cannedmonster.platform.PlayerAccess;
 import com.mojang.logging.LogUtils;
@@ -31,6 +33,7 @@ public final class CanActions {
                 || !(target.level() instanceof ServerLevel level) || BodyLinks.isFacet(target)
                 || !target.isAlive() || target.isRemoved() || target.isPassenger() || target.isVehicle() || target.isLeashed()) return false;
         if (cc.sighs.cannedmonster.space.SpaceManager.spaceOf(target) != null) return false;
+        if (VisualEditorServer.frozen(target)) return false;
         try {
             if (!CanContents.filled(stack)) {
                 if (!FusionRuntime.facets(target).isEmpty() && !item.storesFusion()) return peel(stack, target, actor);
@@ -40,7 +43,7 @@ public final class CanActions {
                 CanContents.write(stack, contents);
                 return true;
             }
-            Mob captured = restore(stack, level);
+            Mob captured = restore(stack, level, actor);
             if (captured == null) return false;
             try {
                 if (captured.getUUID().equals(target.getUUID())) return false;
@@ -67,10 +70,14 @@ public final class CanActions {
     }
 
     public static boolean release(ItemStack stack, ServerLevel level, Vec3 position) {
+        return release(stack, level, position, null);
+    }
+
+    public static boolean release(ItemStack stack, ServerLevel level, Vec3 position, Player actor) {
         Mob mob = null;
         boolean added = false;
         try {
-            mob = restore(stack, level);
+            mob = restore(stack, level, actor);
             if (mob == null) return false;
             EntityStorage.position(mob, position, mob.getXRot());
             mob.setDeltaMovement(Vec3.ZERO);
@@ -78,6 +85,7 @@ public final class CanActions {
             added = level.addFreshEntity(mob);
             if (!added) return false;
             CanContents.clear(stack);
+            if (actor != null) PlayerAccess.syncInventory(actor);
             return true;
         } catch (RuntimeException failure) {
             LOGGER.warn("Cannot release monster can: {}", failure.toString());
@@ -88,6 +96,10 @@ public final class CanActions {
     }
 
     public static Mob restore(ItemStack stack, ServerLevel level) {
+        return restore(stack, level, null);
+    }
+
+    public static Mob restore(ItemStack stack, ServerLevel level, Player actor) {
         if (!CanContents.valid(stack)) return null;
         CompoundTag data = CanContents.entity(stack);
         UUID identity = EntityStorage.identity(data);
@@ -99,6 +111,7 @@ public final class CanActions {
         if (!(created instanceof Mob mob)) return null;
         try {
             EntityStorage.load(mob, data);
+            VisualLayoutResolver.applyFallback(stack, mob, actor);
             if (!mob.isAlive() || mob.isRemoved()) { FusionRuntime.detach(mob); return null; }
             return mob;
         } catch (RuntimeException failure) {

@@ -21,6 +21,7 @@ public abstract class EntitySaveMixin {
         if ((Object) this instanceof net.minecraft.world.entity.Mob mob
                 && !cc.sighs.cannedmonster.fusion.RemovalCalls.active(mob)) {
             FusionRuntime.detach(mob);
+            cc.sighs.cannedmonster.fusion.visual.VisualViews.discard(mob);
         }
     }
 

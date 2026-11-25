@@ -40,6 +40,13 @@ public final class ClientAppearance {
             this(entityId, members, members.stream().map(member -> member.entity).toList(), control, flying, received);
         }
     }
+    private record Preview(List<Member> members, List<Mob> entities) {
+        Preview(List<Mob> entities) {
+            this(entities.stream().map(member -> new Member(UUID.randomUUID(), member)).toList(),
+                    List.copyOf(entities));
+        }
+    }
+    private static final Map<LivingEntity, Preview> PREVIEWS = new IdentityHashMap<>();
 
     private ClientAppearance() {}
 
@@ -56,6 +63,7 @@ public final class ClientAppearance {
         }
         REVISIONS.put(packet.bodyId(), packet.revision());
         TOMBSTONES.remove(packet.bodyId());
+        if (packet.full() || packet.layout() != null) VisualViews.accept(packet.bodyId(), packet.layout());
         if (packet.members().isEmpty()) {
             if (old != null) dispose(old);
             VIEWS.remove(packet.bodyId());
@@ -151,7 +159,7 @@ public final class ClientAppearance {
             View view = entry.getValue();
             var body = level.getEntity(view.entityId);
             boolean expired = body == null ? clock - view.received > 100 : body.isRemoved() || !body.getUUID().equals(entry.getKey());
-            if (expired) { dispose(view); retire(entry.getKey()); }
+            if (expired) { dispose(view); retire(entry.getKey()); VisualViews.forget(entry.getKey()); }
             return expired;
         });
         TOMBSTONES.entrySet().removeIf(entry -> {
@@ -191,6 +199,10 @@ public final class ClientAppearance {
         view.members.forEach(member -> ClientMemberEvents.dispose(member.entity));
     }
 
+    private static void dispose(Preview preview) {
+        preview.members.forEach(member -> ClientMemberEvents.dispose(member.entity));
+    }
+
     private static void applyLocalGravity() {
         var player = Minecraft.getInstance().player;
         if (player == null) {
@@ -220,9 +232,12 @@ public final class ClientAppearance {
             localFlightApplied = false;
             VIEWS.values().forEach(ClientAppearance::dispose);
             VIEWS.clear();
+            PREVIEWS.values().forEach(ClientAppearance::dispose);
+            PREVIEWS.clear();
             REVISIONS.clear();
             TOMBSTONES.clear();
             PENDING.clear();
+            VisualViews.clearClient();
             level = current;
         }
     }
@@ -248,9 +263,30 @@ public final class ClientAppearance {
 
     public static List<Mob> members(LivingEntity body) {
         checkLevel();
+        Preview preview = PREVIEWS.get(body);
+        if (preview != null) return preview.entities();
         View view = VIEWS.get(body.getUUID());
         if (view == null || view.entityId != body.getId()) return List.of();
         return view.entities;
+    }
+
+    /**
+     * Hydrates members of a detached preview body. These entities never join the level and are
+     * only posed and rendered through the same slice path as tracked fusion members.
+     */
+    public static void preview(LivingEntity body, List<Mob> members) {
+        clearPreview(body);
+        if (members.isEmpty()) return;
+        PREVIEWS.put(body, new Preview(members));
+    }
+
+    public static boolean preview(LivingEntity body) {
+        return PREVIEWS.containsKey(body);
+    }
+
+    public static void clearPreview(LivingEntity body) {
+        Preview preview = PREVIEWS.remove(body);
+        if (preview != null) dispose(preview);
     }
 
     public static void pose(Mob member, LivingEntity body) {

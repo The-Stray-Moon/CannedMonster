@@ -1,0 +1,109 @@
+---- Minecraft Crash Report ----
+// Daisy, daisy...
+
+Time: 2026-11-25 20:56:21
+Description: Exception in server tick loop
+
+java.lang.NoClassDefFoundError: cc/sighs/cannedmonster/fusion/PlayerSpeed
+	at TRANSFORMER/cannedmonster@1.0.0-SNAPSHOT/cc.sighs.cannedmonster.fusion.FusionRuntime.detach(FusionRuntime.java:413) ~[%23193!/:?] {re:mixin,re:classloading}
+	at TRANSFORMER/cannedmonster@1.0.0-SNAPSHOT/cc.sighs.cannedmonster.fusion.PlayerFusion.logout(PlayerFusion.java:106) ~[%23193!/:?] {re:mixin,re:classloading}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.server.players.PlayerList.handler$zbp000$cannedmonster$afterSave(PlayerList.java:974) ~[neoforge-21.1.234.jar%23191!/:?] {re:mixin,re:classloading,pl:mixin:APP:cannedmonster.mixins.json:PlayerFusionLogoutMixin from mod cannedmonster,pl:mixin:APP:cannedmonster.mixins.json:SpaceBroadcastMixin from mod cannedmonster,pl:mixin:APP:kubejs.mixins.json:PlayerListMixin from mod kubejs,pl:mixin:A}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.server.players.PlayerList.remove(PlayerList.java:388) ~[neoforge-21.1.234.jar%23191!/:?] {re:mixin,re:classloading,pl:mixin:APP:cannedmonster.mixins.json:PlayerFusionLogoutMixin from mod cannedmonster,pl:mixin:APP:cannedmonster.mixins.json:SpaceBroadcastMixin from mod cannedmonster,pl:mixin:APP:kubejs.mixins.json:PlayerListMixin from mod kubejs,pl:mixin:A}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.server.network.ServerGamePacketListenerImpl.removePlayerFromWorld(ServerGamePacketListenerImpl.java:1215) ~[neoforge-21.1.234.jar%23191!/:?] {re:mixin,xf:cannedmonster_asm:default,re:classloading,xf:cannedmonster_asm:default,pl:mixin:APP:cannedmonster.mixins.json:RidingNetworkMixin from mod cannedmonster,pl:mixin:APP:cannedmonster.mixins.json:SpacePacketMixin from mod cannedmonster,pl:mixin:A}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.server.network.ServerGamePacketListenerImpl.onDisconnect(ServerGamePacketListenerImpl.java:1204) ~[neoforge-21.1.234.jar%23191!/:?] {re:mixin,xf:cannedmonster_asm:default,re:classloading,xf:cannedmonster_asm:default,pl:mixin:APP:cannedmonster.mixins.json:RidingNetworkMixin from mod cannedmonster,pl:mixin:APP:cannedmonster.mixins.json:SpacePacketMixin from mod cannedmonster,pl:mixin:A}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.network.Connection.handleDisconnection(Connection.java:643) ~[neoforge-21.1.234.jar%23191!/:?] {re:classloading}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.server.network.ServerConnectionListener.tick(ServerConnectionListener.java:172) ~[neoforge-21.1.234.jar%23191!/:?] {re:classloading}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.server.MinecraftServer.tickChildren(MinecraftServer.java:1051) ~[neoforge-21.1.234.jar%23191!/:?] {re:mixin,pl:accesstransformer:B,re:classloading,pl:accesstransformer:B,pl:mixin:APP:kubejs.mixins.json:MinecraftServerMixin from mod kubejs,pl:mixin:A}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.server.MinecraftServer.tickServer(MinecraftServer.java:917) ~[neoforge-21.1.234.jar%23191!/:?] {re:mixin,pl:accesstransformer:B,re:classloading,pl:accesstransformer:B,pl:mixin:APP:kubejs.mixins.json:MinecraftServerMixin from mod kubejs,pl:mixin:A}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.client.server.IntegratedServer.tickServer(IntegratedServer.java:110) ~[neoforge-21.1.234.jar%23191!/:?] {re:classloading,pl:runtimedistcleaner:A}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.server.MinecraftServer.runServer(MinecraftServer.java:707) ~[neoforge-21.1.234.jar%23191!/:?] {re:mixin,pl:accesstransformer:B,re:classloading,pl:accesstransformer:B,pl:mixin:APP:kubejs.mixins.json:MinecraftServerMixin from mod kubejs,pl:mixin:A}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.server.MinecraftServer.lambda$spin$2(MinecraftServer.java:267) ~[neoforge-21.1.234.jar%23191!/:?] {re:mixin,pl:accesstransformer:B,re:classloading,pl:accesstransformer:B,pl:mixin:APP:kubejs.mixins.json:MinecraftServerMixin from mod kubejs,pl:mixin:A}
+	at java.base/java.lang.Thread.run(Thread.java:1583) [?:?] {}
+Caused by: java.lang.ClassNotFoundException: cc.sighs.cannedmonster.fusion.PlayerSpeed
+	at cpw.mods.securejarhandler/cpw.mods.cl.ModuleClassLoader.loadClass(ModuleClassLoader.java:220) ~[securejarhandler-3.0.8.jar:?] {}
+	at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:526) ~[?:?] {}
+	... 14 more
+
+
+A detailed walkthrough of the error, its code path and all known details is as follows:
+---------------------------------------------------------------------------------------
+
+-- System Details --
+Details:
+	Minecraft Version: 1.21.1
+	Minecraft Version ID: 1.21.1
+	Operating System: Windows 11 (amd64) version 10.0
+	Java Version: 21.0.10, Microsoft
+	Java VM Version: OpenJDK 64-Bit Server VM (mixed mode, sharing), Microsoft
+	Memory: 292871424 bytes (279 MiB) / 897581056 bytes (856 MiB) up to 8514437120 bytes (8120 MiB)
+	CPUs: 20
+	Processor Vendor: GenuineIntel
+	Processor Name: 13th Gen Intel(R) Core(TM) i7-13650HX
+	Identifier: Intel64 Family 6 Model 183 Stepping 1
+	Microarchitecture: Raptor Lake
+	Frequency (GHz): 2.80
+	Number of physical packages: 1
+	Number of physical CPUs: 14
+	Number of logical CPUs: 20
+	Graphics card #0 name: NVIDIA GeForce RTX 5060 Laptop GPU
+	Graphics card #0 vendor: NVIDIA
+	Graphics card #0 VRAM (MiB): 8151.00
+	Graphics card #0 deviceId: VideoController1
+	Graphics card #0 versionInfo: 32.0.16.2124
+	Graphics card #1 name: Intel(R) UHD Graphics
+	Graphics card #1 vendor: Intel Corporation
+	Graphics card #1 VRAM (MiB): 2048.00
+	Graphics card #1 deviceId: VideoController2
+	Graphics card #1 versionInfo: 32.0.101.6647
+	Memory slot #0 capacity (MiB): 16384.00
+	Memory slot #0 clockSpeed (GHz): 5.60
+	Memory slot #0 type: Unknown
+	Memory slot #1 capacity (MiB): 16384.00
+	Memory slot #1 clockSpeed (GHz): 5.60
+	Memory slot #1 type: Unknown
+	Virtual memory max (MiB): 37434.44
+	Virtual memory used (MiB): 23155.31
+	Swap memory total (MiB): 4955.00
+	Swap memory used (MiB): 57.38
+	Space in storage for jna.tmpdir (MiB): <path not set>
+	Space in storage for org.lwjgl.system.SharedLibraryExtractPath (MiB): <path not set>
+	Space in storage for io.netty.native.workdir (MiB): <path not set>
+	Space in storage for java.io.tmpdir (MiB): available: 62319.96, total: 330626.00
+	Space in storage for workdir (MiB): available: 146436.86, total: 622241.00
+	JVM Flags: 0 total; 
+	Server Running: true
+	Player Count: 0 / 8; []
+	Active Data Packs: vanilla, mod_data, mod/rhino, mod/cannedmonster, mod/neoforge, mod/kubejs, mod/autojs, mod/betteradvancedtooltips
+	Available Data Packs: bundle, trade_rebalance, vanilla, mod/autojs, mod/betteradvancedtooltips, mod/cannedmonster, mod/kubejs, mod/neoforge, mod/rhino, mod_data
+	Enabled Feature Flags: minecraft:vanilla
+	World Generation: Stable
+	World Seed: 8015156863314645532
+	Type: Integrated Server (map_client.txt)
+	Is Modded: Definitely; Client brand changed to 'neoforge'; Server brand changed to 'neoforge'
+	Launched Version: 21.1.234
+	ModLauncher: 11.0.5+main.901c6ea8
+	ModLauncher launch target: forgeclientdev
+	ModLauncher services: 
+		sponge-mixin-0.15.2+mixin.0.8.7.jar mixin PLUGINSERVICE 
+		loader-4.0.42.jar slf4jfixer PLUGINSERVICE 
+		loader-4.0.42.jar runtime_enum_extender PLUGINSERVICE 
+		at-modlauncher-10.0.1.jar accesstransformer PLUGINSERVICE 
+		loader-4.0.42.jar runtimedistcleaner PLUGINSERVICE 
+		modlauncher-11.0.5.jar mixin TRANSFORMATIONSERVICE 
+		modlauncher-11.0.5.jar fml TRANSFORMATIONSERVICE 
+		modlauncher-11.0.5.jar cannedmonster_asm TRANSFORMATIONSERVICE 
+	FML Language Providers: 
+		javafml@4.0
+		lowcodefml@4.0
+		minecraft@4.0
+	Mod List: 
+		AutoJS-neoforge-1.21.1-1.0.1.jar                  |AutoJS                        |autojs                        |1.0.1               |Manifest: NOSIGNATURE
+		better-advanced-tooltips-2101.1.0-build.1.jar     |Better Advanced Tooltips      |betteradvancedtooltips        |2101.1.0-build.1    |Manifest: NOSIGNATURE
+		main                                              |CannedMonster                 |cannedmonster                 |1.0.0-SNAPSHOT      |Manifest: NOSIGNATURE
+		kubejs-neoforge-2101.7.2-build.379.jar            |KubeJS                        |kubejs                        |2101.7.2-build.379  |Manifest: NOSIGNATURE
+		neoforge-21.1.234.jar                             |Minecraft                     |minecraft                     |1.21.1              |Manifest: NOSIGNATURE
+		neoforge-21.1.234.jar                             |NeoForge                      |neoforge                      |21.1.234            |Manifest: NOSIGNATURE
+		rhino-2101.2.7-build.81.jar                       |Rhino                         |rhino                         |2101.2.7-build.81   |Manifest: NOSIGNATURE
+	Crash Report UUID: 197d61e4-e8b4-4e7f-84ac-e509e68ef28d
+	FML: 4.0.42
+	NeoForge: 21.1.234

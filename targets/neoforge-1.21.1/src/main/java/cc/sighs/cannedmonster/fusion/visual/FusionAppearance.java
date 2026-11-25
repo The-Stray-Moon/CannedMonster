@@ -12,7 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-public record FusionAppearance(int entityId, UUID bodyId, int control, boolean flying, long revision, boolean full, List<Member> members) implements CustomPacketPayload {
+public record FusionAppearance(int entityId, UUID bodyId, int control, boolean flying, long revision, boolean full, List<Member> members, VisualLayout layout) implements CustomPacketPayload {
     public static final Type<FusionAppearance> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath("cannedmonster", "appearance"));
     public static final StreamCodec<RegistryFriendlyByteBuf, FusionAppearance> CODEC = StreamCodec.of(
             FusionAppearance::write, FusionAppearance::read);
@@ -37,6 +37,8 @@ public record FusionAppearance(int entityId, UUID bodyId, int control, boolean f
             member.data.forEach(value -> value.write(buffer));
             buffer.writeNbt(member.presentation);
         }
+        buffer.writeBoolean(appearance.layout != null);
+        if (appearance.layout != null) buffer.writeNbt(appearance.layout.save());
     }
 
     private static FusionAppearance read(RegistryFriendlyByteBuf buffer) {
@@ -58,7 +60,9 @@ public record FusionAppearance(int entityId, UUID bodyId, int control, boolean f
             CompoundTag presentation = buffer.readNbt();
             members.add(new Member(id, type, List.copyOf(data), presentation == null ? new CompoundTag() : presentation));
         }
-        return new FusionAppearance(entityId, bodyId, control >= count ? -1 : control, flying, revision, full, List.copyOf(members));
+        CompoundTag layoutTag = buffer.readBoolean() ? buffer.readNbt() : null;
+        VisualLayout layout = layoutTag == null ? null : VisualLayout.load(layoutTag);
+        return new FusionAppearance(entityId, bodyId, control >= count ? -1 : control, flying, revision, full, List.copyOf(members), layout);
     }
 
     private static int bounded(int value, int max) {

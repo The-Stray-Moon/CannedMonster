@@ -62,6 +62,8 @@ public final class AppearanceSync {
     static FusionAppearance delta(FusionAppearance previous, FusionAppearance current) {
         if (previous.members().size() != current.members().size()) return current;
         boolean changed = previous.control() != current.control() || previous.flying() != current.flying();
+        boolean layoutChanged = !Objects.equals(previous.layout(), current.layout());
+        changed |= layoutChanged;
         List<FusionAppearance.Member> members = new ArrayList<>(current.members().size());
         for (int i = 0; i < current.members().size(); i++) {
             var member = current.members().get(i);
@@ -72,7 +74,7 @@ public final class AppearanceSync {
             members.add(new FusionAppearance.Member(member.id(), member.type(), values, member.presentation()));
         }
         return changed ? new FusionAppearance(current.entityId(), current.bodyId(), current.control(), current.flying(),
-                current.revision(), false, List.copyOf(members)) : null;
+                current.revision(), false, List.copyOf(members), layoutChanged ? current.layout() : null) : null;
     }
 
     public static void tracking(Entity target, ServerPlayer player) {
@@ -92,7 +94,7 @@ public final class AppearanceSync {
         List<Mob> facets = FusionRuntime.facets(body);
         if (facets.isEmpty()) {
             COMPOSITIONS.remove(body);
-            return new FusionAppearance(body.getId(), body.getUUID(), -1, false, ++revision, true, List.of());
+            return new FusionAppearance(body.getId(), body.getUUID(), -1, false, ++revision, true, List.of(), null);
         }
         Composition composition = COMPOSITIONS.get(body);
         if (composition == null || composition.members != facets) {
@@ -122,6 +124,7 @@ public final class AppearanceSync {
                     List.copyOf(values), presentation));
         }
         int control = body instanceof Mob mob ? FusionMotion.controlIndex(mob) : -1;
-        return new FusionAppearance(body.getId(), body.getUUID(), control, FlightRules.hasFlight(body), ++revision, true, List.copyOf(members));
+        return new FusionAppearance(body.getId(), body.getUUID(), control, FlightRules.hasFlight(body), ++revision, true,
+                List.copyOf(members), VisualViews.layout(body));
     }
 }

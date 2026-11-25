@@ -33,8 +33,9 @@ public final class CannedMonsterNeoForge121 {
         modBus.addListener((net.neoforged.fml.event.config.ModConfigEvent.Loading event) -> FlightConfig.apply(event));
         modBus.addListener((net.neoforged.fml.event.config.ModConfigEvent.Reloading event) -> FlightConfig.apply(event));
         CanRegistration.register(modBus);
+        cc.sighs.cannedmonster.platform.EditorNetwork.register(modBus);
         modBus.addListener((net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent event) ->
-                event.registrar("3").playToClient(cc.sighs.cannedmonster.fusion.visual.FusionAppearance.TYPE,
+                event.registrar("4").playToClient(cc.sighs.cannedmonster.fusion.visual.FusionAppearance.TYPE,
                         cc.sighs.cannedmonster.fusion.visual.FusionAppearance.CODEC,
                         (packet, context) -> cc.sighs.cannedmonster.fusion.visual.ClientAppearance.receive(packet)));
         modBus.addListener((net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent event) ->
@@ -42,7 +43,7 @@ public final class CannedMonsterNeoForge121 {
                         cc.sighs.cannedmonster.fusion.RidingState.CODEC,
                         (packet, context) -> cc.sighs.cannedmonster.fusion.visual.ClientRiding.receive(packet)));
         modBus.addListener((net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent event) ->
-                event.registrar("3").playToClient(cc.sighs.cannedmonster.fusion.visual.MemberEvent.TYPE,
+                event.registrar("4").playToClient(cc.sighs.cannedmonster.fusion.visual.MemberEvent.TYPE,
                         cc.sighs.cannedmonster.fusion.visual.MemberEvent.CODEC,
                         (packet, context) -> cc.sighs.cannedmonster.fusion.visual.ClientAppearance.receive(packet)));
         modBus.addListener((net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent event) ->
@@ -76,6 +77,8 @@ public final class CannedMonsterNeoForge121 {
         NeoForge.EVENT_BUS.addListener(this::canInteractionSpecific);
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) ->
                 cc.sighs.cannedmonster.space.SpaceManager.tick(event.getServer()));
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) ->
+                cc.sighs.cannedmonster.fusion.visual.VisualEditorServer.tick(event.getServer()));
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.server.ServerStartedEvent event) ->
                 cc.sighs.cannedmonster.space.SpaceManager.started(event.getServer()));
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.server.ServerStoppingEvent event) ->
@@ -91,8 +94,10 @@ public final class CannedMonsterNeoForge121 {
                 cc.sighs.cannedmonster.space.SpaceManager.joined(player);
         });
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerLoggedOutEvent event) -> {
-            if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)
+            if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player) {
                 cc.sighs.cannedmonster.space.SpaceManager.clientLeft(player);
+                cc.sighs.cannedmonster.fusion.visual.VisualEditorServer.left(player);
+            }
         });
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.entity.living.LivingDeathEvent event) ->
                 cc.sighs.cannedmonster.space.SpaceManager.entityDied(event.getEntity()));
@@ -158,6 +163,8 @@ public final class CannedMonsterNeoForge121 {
     private void stop(ServerStoppedEvent event) {
         CANCEL_JOINS.clear();
         cc.sighs.cannedmonster.space.SpaceManager.stop(event.getServer());
+        cc.sighs.cannedmonster.fusion.visual.VisualEditorServer.stop();
+        cc.sighs.cannedmonster.fusion.visual.VisualDefaults.clear();
         FusionRuntime.clear();
     }
 

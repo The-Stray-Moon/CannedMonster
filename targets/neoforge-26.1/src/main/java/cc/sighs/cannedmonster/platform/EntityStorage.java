@@ -1,6 +1,7 @@
 package cc.sighs.cannedmonster.platform;
 
 import cc.sighs.cannedmonster.fusion.FusionRuntime;
+import cc.sighs.cannedmonster.fusion.visual.VisualViews;
 import com.mojang.logging.LogUtils;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
@@ -118,13 +119,14 @@ public final class EntityStorage {
         FusionRuntime.save(entity, tag);
         if (tag.contains("NoGravity")) output.putBoolean("NoGravity", false);
         tag.getCompound("cannedmonster:fusion").ifPresent(fusion -> output.store("cannedmonster:fusion", CompoundTag.CODEC, fusion));
+        tag.getCompound(VisualViews.SAVE_KEY).ifPresent(layout -> output.store(VisualViews.SAVE_KEY, CompoundTag.CODEC, layout));
     }
 
     public static void loadFusion(Entity entity, ValueInput input) {
-        input.read("cannedmonster:fusion", CompoundTag.CODEC).ifPresent(fusion -> {
-            CompoundTag tag = new CompoundTag();
-            tag.put("cannedmonster:fusion", fusion);
-            FusionRuntime.load(entity, tag);
-        });
+        CompoundTag tag = new CompoundTag();
+        input.read("cannedmonster:fusion", CompoundTag.CODEC).ifPresent(fusion -> tag.put("cannedmonster:fusion", fusion));
+        input.read(VisualViews.SAVE_KEY, CompoundTag.CODEC).ifPresent(layout -> tag.put(VisualViews.SAVE_KEY, layout));
+        if (!tag.contains("cannedmonster:fusion") && !tag.contains(VisualViews.SAVE_KEY)) return;
+        FusionRuntime.load(entity, tag);
     }
 }

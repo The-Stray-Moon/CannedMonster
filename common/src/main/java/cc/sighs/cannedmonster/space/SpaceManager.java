@@ -1,6 +1,7 @@
 package cc.sighs.cannedmonster.space;
 
 import cc.sighs.cannedmonster.can.CanContents;
+import cc.sighs.cannedmonster.can.SpacePreviewData;
 import cc.sighs.cannedmonster.platform.EntityStorage;
 import cc.sighs.cannedmonster.platform.PlayerAccess;
 import cc.sighs.cannedmonster.platform.SpacePlatform;
@@ -28,6 +29,7 @@ import org.slf4j.Logger;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -84,6 +86,9 @@ public final class SpaceManager {
         private int destroyTicks;
         private String anchorState = "UNKNOWN";
         private long generation;
+        private long previewRevision = 1L;
+        private ListTag previewCache;
+        private long previewCacheRevision = -1L;
 
         private Space(UUID id, ServerLevel level, RoomGeometry internal, RoomGeometry client, int anchorChunkX, int anchorChunkZ) {
             this.id = id;
@@ -108,6 +113,45 @@ public final class SpaceManager {
         public boolean destroyPending() { return destroyPending; }
         public long generation() { return generation; }
         public long advanceGeneration() { return generation = ++GENERATION; }
+
+        private void residentsChanged() {
+            previewRevision++;
+            previewCache = null;
+            previewCacheRevision = -1L;
+        }
+
+        private long previewRevision() { return previewRevision; }
+
+        private ListTag preview() {
+            if (previewCache != null && previewCacheRevision == previewRevision) return previewCache.copy();
+            List<UUID> ids = orderedResidentIds(this);
+            ListTag list = new ListTag();
+            int bytes = 0;
+            for (int index = ids.size() - 1; index >= 0 && list.size() < CanContents.MAX_SPACE_PREVIEWS; index--) {
+                UUID id = ids.get(index);
+                CompoundTag data = residentData.get(id);
+                if (data == null) {
+                    list.add(new CompoundTag());
+                    continue;
+                }
+                CompoundTag preview = SpacePreviewData.resident(data);
+                if (EntityStorage.string(preview, "id").isEmpty()) {
+                    list.add(new CompoundTag());
+                    continue;
+                }
+                int size = preview.sizeInBytes();
+                if (size > CanContents.MAX_SPACE_PREVIEW_ENTRY_BYTES
+                        || bytes + size > CanContents.MAX_SPACE_PREVIEW_BYTES) {
+                    list.add(new CompoundTag());
+                    continue;
+                }
+                bytes += size;
+                list.add(preview);
+            }
+            previewCache = list;
+            previewCacheRevision = previewRevision;
+            return list.copy();
+        }
     }
 
     public static boolean enter(ServerPlayer player, ItemStack stack, InteractionHand hand) {
@@ -131,7 +175,7 @@ public final class SpaceManager {
         Vec3 anchor = player.position();
         Vec3 previousAnchor = space.lastAnchor;
         ItemStack dropped = stack.copyWithCount(1);
-        CanContents.storeSpace(dropped, space.id, space.residentData.size());
+        storeSpace(space, dropped);
         ItemEntity item = new ItemEntity(level, anchor.x, anchor.y + 0.1, anchor.z, dropped);
         item.setUnlimitedLifetime();
         item.setDefaultPickUpDelay();
@@ -294,11 +338,25 @@ public final class SpaceManager {
             return false;
         }
         space.residentData.put(residentId, EntityStorage.save(resident));
+        space.residentsChanged();
         mob.setRemoved(Entity.RemovalReason.DISCARDED);
-        CanContents.storeSpace(stack, space.id, space.residentData.size());
+        storeSpace(space, stack);
         forceRoom(space);
         PlayerAccess.message(player, Component.translatable("message.cannedmonster.space_captured", mob.getName()));
         return true;
+    }
+
+    private static void storeSpace(Space space, ItemStack stack) {
+        CanContents.storeSpace(stack, space.id, space.residentData.size(), space.preview(), space.previewRevision());
+    }
+
+    private static long parseRevision(String raw) {
+        if (raw.isEmpty()) return 0L;
+        try {
+            return Long.parseLong(raw);
+        } catch (NumberFormatException invalid) {
+            return 0L;
+        }
     }
 
     private static java.util.List<UUID> orderedResidentIds(Space space) {
@@ -376,6 +434,7 @@ public final class SpaceManager {
         SpacePlatform.retrack(mob);
         space.residentData.remove(residentId);
         space.residentOrder.remove(residentId);
+        space.residentsChanged();
         if (space.residentData.isEmpty() && space.derivedData.isEmpty() && !hasPlayer(space)
                 && !hasQuarantine(space)) {
             if (space.anchorItem != null) {
@@ -388,7 +447,7 @@ public final class SpaceManager {
             releaseAnchorTicket(space);
             CanContents.clearSpace(stack);
         } else {
-            CanContents.storeSpace(stack, space.id, space.residentData.size());
+            storeSpace(space, stack);
         }
         PlayerAccess.syncInventory(player);
         PlayerAccess.message(player, Component.translatable("message.cannedmonster.space_released", mob.getName()));
@@ -596,7 +655,10 @@ public final class SpaceManager {
         boolean resident = space.residentData.remove(id) != null;
         space.derivedData.remove(id);
         space.residentOrder.remove(id);
-        if (resident) refreshCarrier(space);
+        if (resident) {
+            space.residentsChanged();
+            refreshCarrier(space);
+        }
     }
 
     /**
@@ -613,6 +675,7 @@ public final class SpaceManager {
         if (space.residentData.remove(id) != null) {
             space.residentOrder.remove(id);
             RESIDENTS.remove(id);
+            space.residentsChanged();
             refreshCarrier(space);
         }
     }
@@ -620,15 +683,14 @@ public final class SpaceManager {
     /** Keep every can that references this space showing the live resident count. */
     private static void refreshCarrier(Space space) {
         if (space == null || space.level.getServer() == null) return;
-        int count = space.residentData.size();
         for (ServerPlayer player : space.level.getServer().getPlayerList().getPlayers()) {
             if (player.level() != space.level) continue;
             var inventory = player.getInventory();
             boolean changed = false;
             for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
                 ItemStack stack = inventory.getItem(slot);
-                if (space.id.equals(CanContents.spaceId(stack)) && CanContents.spaceCount(stack) != count) {
-                    CanContents.storeSpace(stack, space.id, count);
+                if (space.id.equals(CanContents.spaceId(stack)) && stale(space, stack)) {
+                    storeSpace(space, stack);
                     changed = true;
                 }
             }
@@ -638,11 +700,14 @@ public final class SpaceManager {
             Entity anchor = SpaceDomain.raw(() -> space.level.getEntity(space.anchorItem));
             if (anchor instanceof ItemEntity item && !item.isRemoved()) {
                 ItemStack stack = item.getItem();
-                if (space.id.equals(CanContents.spaceId(stack)) && CanContents.spaceCount(stack) != count) {
-                    CanContents.storeSpace(stack, space.id, count);
-                }
+                if (space.id.equals(CanContents.spaceId(stack)) && stale(space, stack)) storeSpace(space, stack);
             }
         }
+    }
+
+    private static boolean stale(Space space, ItemStack stack) {
+        return CanContents.spaceCount(stack) != space.residentData.size()
+                || CanContents.spacePreviewRevision(stack) != space.previewRevision();
     }
 
     public static boolean isQuarantined(Entity entity) {
@@ -666,8 +731,9 @@ public final class SpaceManager {
                 continue;
             }
             int count = space.residentData.size();
-            if (CanContents.spaceCount(stack) != count) {
-                CanContents.storeSpace(stack, id, count);
+            if (CanContents.spaceCount(stack) != count
+                    || CanContents.spacePreviewRevision(stack) != space.previewRevision()) {
+                storeSpace(space, stack);
                 changed = true;
             }
         }
@@ -675,8 +741,10 @@ public final class SpaceManager {
     }
 
     private static void reconcileStack(Space space, ItemStack stack) {
-        int count = space.residentData.size();
-        if (CanContents.spaceCount(stack) != count) CanContents.storeSpace(stack, space.id, count);
+        if (CanContents.spaceCount(stack) != space.residentData.size()
+                || CanContents.spacePreviewRevision(stack) != space.previewRevision()) {
+            storeSpace(space, stack);
+        }
     }
 
     /**
@@ -984,6 +1052,7 @@ public final class SpaceManager {
             if (entity instanceof Container container && !(entity instanceof Player)) {
                 for (int slot = 0; slot < container.getContainerSize(); slot++) {
                     if (space.id.equals(CanContents.spaceId(container.getItem(slot)))) {
+                        reconcileStack(space, container.getItem(slot));
                         space.anchorEntity = entity.getUUID();
                         space.anchorEntitySlot = slot;
                         space.anchorItem = null;
@@ -1335,6 +1404,7 @@ public final class SpaceManager {
         }
         if (space.destroyPending) tag.putBoolean("Destroyed", true);
         tag.putString("AnchorState", space.anchorState);
+        tag.putString("PreviewRevision", Long.toString(space.previewRevision));
         ListTag residents = new ListTag();
         ListTag order = new ListTag();
         for (UUID id : orderedResidentIds(space)) {
@@ -1424,6 +1494,7 @@ public final class SpaceManager {
                 space.destroyPending = EntityStorage.bool(roomTag, "Destroyed");
                 String anchorState = EntityStorage.string(roomTag, "AnchorState");
                 space.anchorState = anchorState.isEmpty() ? "UNKNOWN" : anchorState;
+                space.previewRevision = Math.max(1L, parseRevision(EntityStorage.string(roomTag, "PreviewRevision")));
                 ListTag derived = EntityStorage.list(roomTag, "Derived");
                 for (Tag derivedTag : derived) {
                     if (!(derivedTag instanceof CompoundTag entry)) continue;
@@ -1492,7 +1563,7 @@ public final class SpaceManager {
         Space space = new Space(spaceId, level, internal, client, chunkX, chunkZ);
         space.lastAnchor = player.position();
         SPACES.put(spaceId, space);
-        CanContents.storeSpace(stack, spaceId, space.residentData.size());
+        storeSpace(space, stack);
         forceRoom(space);
         return space;
     }
@@ -1633,7 +1704,7 @@ public final class SpaceManager {
         }
         Vec3 anchor = space.lastAnchor;
         ItemStack can = SpacePlatform.spatialCan();
-        CanContents.storeSpace(can, space.id, space.residentData.size());
+        storeSpace(space, can);
         ItemEntity item = new ItemEntity(space.level, anchor.x, anchor.y + 0.1, anchor.z, can);
         item.setUnlimitedLifetime();
         item.setDefaultPickUpDelay();

@@ -33,4 +33,8 @@ public final class PlayerAccess {
             server.inventoryMenu.broadcastChanges();
         }
     }
+
+    public static boolean admin(Player player) {
+        return player instanceof net.minecraft.server.level.ServerPlayer server && server.hasPermissions(2);
+    }
 }

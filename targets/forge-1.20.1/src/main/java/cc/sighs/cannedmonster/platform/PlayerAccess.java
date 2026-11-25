@@ -9,7 +9,7 @@ public final class PlayerAccess {
     private PlayerAccess() {}
 
     public static void copyContents(ItemStack source, ItemStack target) {
-        CanContents.write(target, source.getTag().getCompound(CanContents.KEY).copy());
+        target.setTag(source.getTag() == null ? null : source.getTag().copy());
     }
 
     public static boolean same(ItemStack first, ItemStack second) {
@@ -32,5 +32,9 @@ public final class PlayerAccess {
         if (player instanceof net.minecraft.server.level.ServerPlayer server) {
             server.inventoryMenu.broadcastChanges();
         }
+    }
+
+    public static boolean admin(Player player) {
+        return player instanceof net.minecraft.server.level.ServerPlayer server && server.hasPermissions(2);
     }
 }

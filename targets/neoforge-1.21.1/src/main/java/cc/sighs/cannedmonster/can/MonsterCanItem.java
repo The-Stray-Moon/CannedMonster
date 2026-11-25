@@ -23,6 +23,12 @@ public final class MonsterCanItem extends BaseCanItem {
     @Override
     public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
+        if (storesMobs() && storesFusion() && player.isShiftKeyDown() && CanContents.valid(stack)) {
+            if (level.isClientSide()) return InteractionResultHolder.success(stack);
+            return player instanceof net.minecraft.server.level.ServerPlayer server
+                    && cc.sighs.cannedmonster.fusion.visual.VisualEditorServer.openHeld(server, hand)
+                    ? InteractionResultHolder.success(stack) : InteractionResultHolder.pass(stack);
+        }
         if (spatial()) {
             if (level.isClientSide()) {
                 // Creative clients echo their predicted slot back to the server; clearing the

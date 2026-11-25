@@ -1,10 +1,12 @@
 package cc.sighs.cannedmonster.can;
 
 import cc.sighs.cannedmonster.fusion.PlayerFusion;
+import cc.sighs.cannedmonster.fusion.visual.VisualEditorServer;
 import cc.sighs.cannedmonster.platform.PlayerAccess;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.stats.Stats;
@@ -17,10 +19,12 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.UseOnContext;
+import net.minecraft.world.inventory.tooltip.TooltipComponent;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.WeakHashMap;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -63,6 +67,13 @@ public abstract class BaseCanItem extends Item {
 
     @Override
     public InteractionResult interactLivingEntity(ItemStack stack, Player player, LivingEntity target, InteractionHand hand) {
+        if (!throwable && storesMobs() && storesFusion() && player.isShiftKeyDown() && CanContents.valid(stack)) {
+            if (target.level().isClientSide()) return InteractionResult.SUCCESS;
+            if (player instanceof ServerPlayer server && VisualEditorServer.openEntity(server, hand, target)) {
+                return InteractionResult.CONSUME;
+            }
+        }
+        if (VisualEditorServer.frozen(player, stack)) return InteractionResult.FAIL;
         if (throwable) return InteractionResult.PASS;
         if (!(target instanceof Mob mob)) return InteractionResult.FAIL;
         if (target.level().isClientSide()) return InteractionResult.SUCCESS;
@@ -76,8 +87,17 @@ public abstract class BaseCanItem extends Item {
 
     @Override
     public InteractionResult useOn(UseOnContext context) {
-        if (throwable) return InteractionResult.PASS;
         ItemStack stack = context.getItemInHand();
+        Player actor = context.getPlayer();
+        if (storesMobs() && storesFusion() && CanContents.valid(stack) && actor != null && actor.isShiftKeyDown()) {
+            if (context.getLevel().isClientSide()) return InteractionResult.SUCCESS;
+            if (actor instanceof ServerPlayer server
+                    && VisualEditorServer.openBlock(server, context.getHand(), context.getClickedPos())) {
+                return InteractionResult.CONSUME;
+            }
+        }
+        if (actor != null && VisualEditorServer.frozen(actor, stack)) return InteractionResult.FAIL;
+        if (throwable) return InteractionResult.PASS;
         if (spatial) {
             if (context.getLevel().isClientSide()) return InteractionResult.SUCCESS;
             if (!(context.getPlayer() instanceof net.minecraft.server.level.ServerPlayer player)
@@ -89,12 +109,13 @@ public abstract class BaseCanItem extends Item {
         if (!CanContents.filled(stack)) return InteractionResult.PASS;
         if (!(context.getLevel() instanceof ServerLevel level)) return InteractionResult.SUCCESS;
         Vec3 position = Vec3.atBottomCenterOf(context.getClickedPos().relative(context.getClickedFace()));
-        return CanActions.release(stack, level, position) ? InteractionResult.CONSUME : InteractionResult.FAIL;
+        return CanActions.release(stack, level, position, context.getPlayer()) ? InteractionResult.CONSUME : InteractionResult.FAIL;
     }
 
     protected boolean beginUse(Level level, Player player, InteractionHand hand) {
         if (!throwable && (spatial || random)) return false;
         ItemStack stack = player.getItemInHand(hand);
+        if (VisualEditorServer.frozen(player, stack)) return false;
         if (!throwable && !level.isClientSide()) PRESSES.put(player, new Press(!CanContents.filled(stack), hand, stack, stack.copy()));
         player.startUsingItem(hand);
         return true;
@@ -103,6 +124,7 @@ public abstract class BaseCanItem extends Item {
     @Override
     public ItemStack finishUsingItem(ItemStack stack, Level level, LivingEntity entity) {
         if (throwable || !storesMobs() || !(entity instanceof Player player)) return stack;
+        if (!level.isClientSide() && VisualEditorServer.frozen(player, stack)) return stack;
         if (level.isClientSide()) {
             clientFinished.accept(player);
             return stack;
@@ -130,6 +152,7 @@ public abstract class BaseCanItem extends Item {
 
     protected boolean release(ItemStack stack, Level level, LivingEntity entity, int remainingTicks) {
         if (!(level instanceof ServerLevel server) || !(entity instanceof Player player) || stack.isEmpty()) return false;
+        if (!VisualEditorServer.release((ServerPlayer) player, stack)) return false;
         if (throwable) {
             float strength = power(duration(stack) - remainingTicks);
             if (strength < 0.1F) return false;
@@ -173,11 +196,21 @@ public abstract class BaseCanItem extends Item {
         return name.isEmpty() ? base : Component.translatable("item.cannedmonster.with_name", base, name);
     }
 
+    @Override
+    public Optional<TooltipComponent> getTooltipImage(ItemStack stack) {
+        return CanPreviewSource.previewable(stack) ? Optional.of(new CanPreviewTooltip(stack)) : Optional.empty();
+    }
+
     protected void tooltip(ItemStack stack, Consumer<Component> tooltip) {
         if (spatial) {
             tooltip.accept(Component.translatable(CanContents.spaceId(stack) == null
                     ? "tooltip.cannedmonster.spatial_empty"
                     : "tooltip.cannedmonster.spatial_ready", CanContents.spaceCount(stack)).withStyle(ChatFormatting.GRAY));
+            CanPreviewSource.SpaceSelection selection = CanPreviewSource.spaceSelection(stack);
+            if (selection != null) {
+                tooltip.accept(Component.translatable("tooltip.cannedmonster.space_preview",
+                        selection.selected(), selection.total()).withStyle(ChatFormatting.GRAY));
+            }
             tooltip.accept(Component.translatable("tooltip.cannedmonster.spatial_use").withStyle(ChatFormatting.GRAY));
             return;
         }
@@ -195,5 +228,6 @@ public abstract class BaseCanItem extends Item {
         }
         tooltip.accept(Component.translatable(throwable ? "tooltip.cannedmonster.throw"
                 : large ? "tooltip.cannedmonster.hand_large" : "tooltip.cannedmonster.hand").withStyle(ChatFormatting.GRAY));
+        cc.sighs.cannedmonster.fusion.visual.VisualLayoutResolver.appendTooltip(stack, tooltip);
     }
 }

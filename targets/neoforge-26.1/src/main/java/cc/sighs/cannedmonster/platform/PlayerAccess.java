@@ -33,4 +33,8 @@ public final class PlayerAccess {
     public static void syncInventory(Player player) {
         if (player instanceof ServerPlayer server) server.inventoryMenu.broadcastChanges();
     }
+
+    public static boolean admin(Player player) {
+        return player != null && player.permissions().hasPermission(net.minecraft.server.permissions.Permissions.COMMANDS_GAMEMASTER);
+    }
 }

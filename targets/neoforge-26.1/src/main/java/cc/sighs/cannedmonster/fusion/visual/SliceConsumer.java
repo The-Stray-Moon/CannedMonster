@@ -10,26 +10,28 @@ import java.util.EnumSet;
 import java.util.Set;
 
 /**
- * Captures the vertices a model emits and re-emits only the part inside a horizontal band of the
+ * Captures the vertices a model emits and re-emits only the part inside the layer band of the
  * fusion body. Vertices arrive in body space (the model applies its own pose), so the inverse body
- * matrix maps them back before clipping.
+ * matrix maps them back before both plane distances are clipped.
  */
 public final class SliceConsumer implements VertexConsumer {
-    private static final int STRIDE = 17;
-    private static final int AXIS = 16;
+    private static final int STRIDE = 18;
+    private static final int LOWER_AXIS = 16;
+    private static final int UPPER_AXIS = 17;
     private static final Set<VertexFormat.Mode> WARNED = EnumSet.noneOf(VertexFormat.Mode.class);
 
     private final VertexConsumer destination;
     private final Matrix4f inverse;
-    private final float lower;
-    private final float upper;
+    private final VisualGeometry.Cut lower;
+    private final VisualGeometry.Cut upper;
     private final VertexFormat.Mode mode;
     private float[] vertices = new float[STRIDE * 64];
     private int count;
     private int current;
     private final SliceGeometry.Workspace clipping = new SliceGeometry.Workspace(STRIDE);
 
-    public SliceConsumer(VertexConsumer destination, Matrix4f inverse, float lower, float upper, VertexFormat.Mode mode) {
+    public SliceConsumer(VertexConsumer destination, Matrix4f inverse, VisualGeometry.Cut lower,
+                         VisualGeometry.Cut upper, VertexFormat.Mode mode) {
         this.destination = destination;
         this.inverse = new Matrix4f(inverse);
         this.lower = lower;
@@ -47,7 +49,7 @@ public final class SliceConsumer implements VertexConsumer {
         int size = mode == VertexFormat.Mode.QUADS ? 4 : 3;
         int emitted = 0;
         for (int offset = 0; offset + size <= count; offset += size) {
-            int clipped = clipping.clip(vertices, offset * STRIDE, size, AXIS, lower, upper);
+            int clipped = clipping.clipBand(vertices, offset * STRIDE, size, LOWER_AXIS, UPPER_AXIS);
             if (clipped < 3) continue;
             float[] polygon = clipping.vertices();
             for (int i = 1; i + 1 < clipped; i++) {
@@ -86,7 +88,11 @@ public final class SliceConsumer implements VertexConsumer {
         vertices[current] = x;
         vertices[current + 1] = y;
         vertices[current + 2] = z;
-        vertices[current + AXIS] = inverse.m01() * x + inverse.m11() * y + inverse.m21() * z + inverse.m31();
+        float localX = inverse.m00() * x + inverse.m10() * y + inverse.m20() * z + inverse.m30();
+        float localY = inverse.m01() * x + inverse.m11() * y + inverse.m21() * z + inverse.m31();
+        float localZ = inverse.m02() * x + inverse.m12() * y + inverse.m22() * z + inverse.m32();
+        vertices[current + LOWER_AXIS] = lower.distance(localX, localY, localZ);
+        vertices[current + UPPER_AXIS] = upper.distance(localX, localY, localZ);
         return this;
     }
 

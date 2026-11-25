@@ -27,6 +27,20 @@ public final class CanStorage {
         if (stack.getTag().isEmpty()) stack.setTag(null);
     }
 
+    public static CompoundTag compound(ItemStack stack, String key) {
+        return stack.hasTag() ? stack.getTag().getCompound(key) : new CompoundTag();
+    }
+
+    public static void put(ItemStack stack, String key, CompoundTag value) {
+        stack.getOrCreateTag().put(key, value.copy());
+    }
+
+    public static void remove(ItemStack stack, String key) {
+        if (!stack.hasTag()) return;
+        stack.getTag().remove(key);
+        if (stack.getTag().isEmpty()) stack.setTag(null);
+    }
+
     public static String text(StringTag tag) {
         return tag.getAsString();
     }

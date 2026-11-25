@@ -3,6 +3,8 @@ package cc.sighs.cannedmonster.fusion;
 import cc.sighs.cannedmonster.can.CanActions;
 import cc.sighs.cannedmonster.can.CanContents;
 import cc.sighs.cannedmonster.can.MonsterCanItem;
+import cc.sighs.cannedmonster.fusion.visual.VisualLayoutResolver;
+import cc.sighs.cannedmonster.fusion.visual.VisualViews;
 import com.mojang.logging.LogUtils;
 import cc.sighs.cannedmonster.platform.PlayerAccess;
 import net.minecraft.nbt.CompoundTag;
@@ -26,7 +28,8 @@ public final class PlayerFusion {
 
     private static boolean valid(Player player, ItemStack stack) {
         return !player.level().isClientSide() && player.isAlive() && !player.isRemoved() && !player.isSpectator()
-                && !UNRESOLVED.containsKey(player) && stack.getItem() instanceof MonsterCanItem item && item.storesMobs();
+                && !UNRESOLVED.containsKey(player) && stack.getItem() instanceof MonsterCanItem item && item.storesMobs()
+                && !cc.sighs.cannedmonster.fusion.visual.VisualEditorServer.frozen(player);
     }
 
     public static boolean fuse(Player player, ItemStack stack) {
@@ -55,7 +58,11 @@ public final class PlayerFusion {
             ItemStack prepared = stack.copyWithCount(1);
             if (item.storesFusion()) {
                 List<Mob> members = facets(player);
+                var stored = VisualViews.stored(player);
                 CanContents.store(prepared, FusionRuntime.packAll(player), "", members.size());
+                if (stored != null && stored.layerCount() == members.size()) {
+                    VisualLayoutResolver.writeEmbedded(prepared, stored);
+                }
                 FusionRuntime.stripAll(player);
             } else {
                 Mob member = facets(player).get(0);
@@ -97,6 +104,7 @@ public final class PlayerFusion {
 
     public static void logout(Player player) {
         FusionRuntime.detach(player);
+        cc.sighs.cannedmonster.fusion.visual.VisualViews.discard(player);
         UNRESOLVED.remove(player);
     }
 

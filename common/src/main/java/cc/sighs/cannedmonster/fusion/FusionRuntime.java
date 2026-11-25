@@ -2,6 +2,8 @@ package cc.sighs.cannedmonster.fusion;
 
 import cc.sighs.cannedmonster.platform.TagAccess;
 import cc.sighs.cannedmonster.platform.EntityStorage;
+import cc.sighs.cannedmonster.fusion.visual.VisualLayout;
+import cc.sighs.cannedmonster.fusion.visual.VisualViews;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.network.syncher.EntityDataAccessor;
@@ -109,6 +111,7 @@ public final class FusionRuntime {
             if (host instanceof Mob mob) mob.setPersistenceRequired();
             OrderedCalls.bind(host, facets, FusionRuntime::aiBoundary);
             if (host instanceof Player player) FlightRules.refresh(player);
+            VisualViews.reconcile(host);
         } catch (RuntimeException exception) {
             OrderedCalls.unbind(host);
             HOSTS.remove(host);
@@ -167,10 +170,32 @@ public final class FusionRuntime {
         List<Mob> combined = new ArrayList<>(incomingMembers);
         combined.add(incoming);
         combined.addAll(previous);
+        VisualLayout hostLayout = VisualViews.stored(host);
+        VisualLayout incomingLayout = VisualViews.stored(incoming);
+        List<LivingEntity> incomingOrdered = new ArrayList<>(incomingMembers);
+        incomingOrdered.add(incoming);
+        List<LivingEntity> hostOrdered = new ArrayList<>(previous);
+        hostOrdered.add(host);
+        VisualLayout combinedLayout = null;
+        if (hostLayout != null || incomingLayout != null) {
+            try {
+                VisualLayout top = incomingLayout != null ? incomingLayout : VisualLayout.legacy(incomingOrdered);
+                VisualLayout bottom = hostLayout != null ? hostLayout : VisualLayout.legacy(hostOrdered);
+                VisualLayout merged = VisualLayout.join(top, bottom);
+                if (merged.planeCount() != Math.max(0, merged.layerCount() - 1)) {
+                    merged = new VisualLayout(merged.layers(), VisualLayout.defaults(merged.layerCount()).planes());
+                }
+                combinedLayout = merged;
+            } catch (RuntimeException failure) {
+                com.mojang.logging.LogUtils.getLogger().warn("Cannot merge visual layouts for prepend: {}", failure.toString());
+            }
+        }
         detach(incoming);
         detach(host);
         try {
             attach(host, combined, combinedOrigins);
+            if (combinedLayout != null) VisualViews.set(host, combinedLayout);
+            VisualViews.discard(incoming);
         } catch (RuntimeException failure) {
             detach(host);
             if (!previous.isEmpty()) attach(host, previous, previousOrigins);
@@ -198,6 +223,7 @@ public final class FusionRuntime {
             if (remaining.isEmpty()) AttributeAverages.apply(host, List.of(previousOrigins.get(previousOrigins.size() - 1)),
                     host instanceof Player ? Set.of(PlayerSpeed.ATTRIBUTE) : Set.of());
             else attach(host, remaining, remainingOrigins);
+            VisualViews.reconcile(host);
             return peeled;
         } catch (RuntimeException failure) {
             detach(host);
@@ -246,6 +272,7 @@ public final class FusionRuntime {
 
     public static void save(Entity entity, CompoundTag tag) {
         if (!(entity instanceof LivingEntity host)) return;
+        VisualViews.save(host, tag);
         if (host instanceof Player player && PlayerFusion.saveUnresolved(player, tag)) return;
         List<Mob> facets = facets(host);
         if (facets.isEmpty()) return;
@@ -290,7 +317,12 @@ public final class FusionRuntime {
         List<Mob> members = facets(player);
         if (members.isEmpty()) throw new IllegalArgumentException("No fusion members to pack");
         var origins = originsOf(player);
-        if (members.size() == 1) return independentSave(members.get(0));
+        if (members.size() == 1) {
+            CompoundTag only = independentSave(members.get(0));
+            VisualLayout single = packedPlayerLayout(player, 1);
+            if (single != null) only.put(VisualViews.SAVE_KEY, single.save());
+            return only;
+        }
         CompoundTag body = independentSave(members.get(members.size() - 1));
         CompoundTag fusion = new CompoundTag();
         fusion.putInt("Version", 2);
@@ -303,7 +335,27 @@ public final class FusionRuntime {
         }
         fusion.put("Members", list);
         body.put(SAVE_KEY, fusion);
+        VisualLayout packedLayout = packedPlayerLayout(player, members.size());
+        if (packedLayout != null) body.put(VisualViews.SAVE_KEY, packedLayout.save());
         return body;
+    }
+
+    /**
+     * Player layouts end with the player slice. A packed large can restores only the members, so the
+     * bottom layer and its cut plane are dropped; the remaining authored layer values survive.
+     */
+    private static VisualLayout packedPlayerLayout(Player player, int memberCount) {
+        VisualLayout layout = VisualViews.stored(player);
+        if (layout == null || layout.layerCount() != memberCount + 1) return null;
+        try {
+            List<VisualLayout.Layer> layers = List.copyOf(layout.layers().subList(0, layout.layerCount() - 1));
+            List<VisualLayout.Plane> planes = layout.planes().isEmpty()
+                    ? List.of() : List.copyOf(layout.planes().subList(0, layout.planeCount() - 1));
+            return new VisualLayout(layers, planes);
+        } catch (RuntimeException failure) {
+            com.mojang.logging.LogUtils.getLogger().warn("Cannot pack visual layout into a large can: {}", failure.toString());
+            return null;
+        }
     }
 
     public static int memberCount(CompoundTag entity) {
@@ -314,6 +366,7 @@ public final class FusionRuntime {
         List<Map<String, Double>> origins = originsOf(player);
         if (facets(player).isEmpty()) return;
         detach(player);
+        VisualViews.discard(player);
         try {
             AttributeAverages.apply(player, List.of(origins.get(origins.size() - 1)), Set.of(PlayerSpeed.ATTRIBUTE));
         } catch (RuntimeException failure) {
@@ -322,7 +375,9 @@ public final class FusionRuntime {
     }
 
     public static void load(Entity entity, CompoundTag tag) {
-        if (!(entity instanceof LivingEntity host) || host.level().isClientSide() || !tag.contains(SAVE_KEY)) return;
+        if (!(entity instanceof LivingEntity host) || host.level().isClientSide()) return;
+        VisualViews.load(host, tag);
+        if (!tag.contains(SAVE_KEY)) return;
         CompoundTag fusion = EntityStorage.compound(tag, SAVE_KEY);
         try {
             int version = EntityStorage.integer(fusion, "Version");
@@ -382,5 +437,6 @@ public final class FusionRuntime {
         RidingSync.clear();
         FusionGaze.clear();
         TeleportCalls.clear();
+        VisualViews.clear();
     }
 }

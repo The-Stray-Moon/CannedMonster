@@ -15,7 +15,6 @@ import org.joml.Quaternionf;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -52,7 +51,10 @@ public final class FusionRenderer {
         var offset = renderer.getRenderOffset(state);
         List<LivingEntity> members = new ArrayList<>(facets);
         members.add(host);
+        VisualLayout layout = VisualGeometry.aligned(VisualViews.layout(host), members.size(),
+                () -> VisualLayout.legacy(members));
         int total = members.size();
+        float width = Math.max(0.01F, host.getBbWidth());
         float height = Math.max(0.01F, host.getBbHeight());
         poses.pushPose();
         poses.translate(x + offset.x, y + offset.y, z + offset.z);
@@ -61,17 +63,16 @@ public final class FusionRenderer {
         try {
             for (int i = 0; i < total; i++) {
                 LivingEntity member = members.get(i);
-                float lower = i == total - 1 ? Float.NEGATIVE_INFINITY : height * (total - i - 1) / total;
-                float upper = i == 0 ? Float.POSITIVE_INFINITY : height * (total - i) / total;
+                VisualLayout.Layer layer = layout.layers().get(i);
+                if (!layer.visible()) continue;
                 EntityRenderer memberRenderer = member == host ? renderer : dispatcher.getRenderer(member);
                 EntityRenderState memberState = memberRenderer.createRenderState(member, state.partialTick);
+                VisualGeometry.Cut lower = VisualGeometry.lower(layout, i, width, height);
+                VisualGeometry.Cut upper = VisualGeometry.upper(layout, i, width, height);
                 poses.pushPose();
                 try {
-                    if (member != host) {
-                        float scaleY = height / Math.max(0.01F, member.getBbHeight());
-                        float scaleXZ = Math.max(0.01F, host.getBbWidth()) / Math.max(0.01F, member.getBbWidth());
-                        poses.scale(scaleXZ, scaleY, scaleXZ);
-                    }
+                    VisualGeometry.applyPose(poses, layer, width, height,
+                            VisualGeometry.bandFloor(layout, i));
                     SliceContext.run(new SliceContext.Band(inverse, lower, upper),
                             () -> memberRenderer.submit(memberState, poses, collector, camera));
                 } finally {

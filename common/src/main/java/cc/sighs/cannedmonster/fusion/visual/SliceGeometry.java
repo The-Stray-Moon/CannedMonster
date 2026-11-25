@@ -21,16 +21,33 @@ public final class SliceGeometry {
         public float[] vertices() { return result; }
 
         public int clip(float[] source, int offset, int count, int axis, float lower, float upper) {
-            int capacity = (count + 4) * stride;
-            if (first.length < capacity) {
-                first = new float[capacity];
-                second = new float[capacity];
-            }
+            ensureCapacity(count);
             System.arraycopy(source, offset, first, 0, count * stride);
             count = plane(first, second, count, axis, lower, true);
             count = plane(second, first, count, axis, upper, false);
             result = first;
             return count;
+        }
+
+        /**
+         * Clips by two stored half spaces whose signed distances live in {@code firstAxis} and
+         * {@code secondAxis}; both keep vertices with a non-negative distance.
+         */
+        public int clipBand(float[] source, int offset, int count, int firstAxis, int secondAxis) {
+            ensureCapacity(count);
+            System.arraycopy(source, offset, first, 0, count * stride);
+            count = plane(first, second, count, firstAxis, 0.0F, true);
+            count = plane(second, first, count, secondAxis, 0.0F, true);
+            result = first;
+            return count;
+        }
+
+        private void ensureCapacity(int count) {
+            int capacity = (count + 4) * stride;
+            if (first.length < capacity) {
+                first = new float[capacity];
+                second = new float[capacity];
+            }
         }
 
         private int plane(float[] input, float[] output, int count, int axis, float boundary, boolean above) {
@@ -46,6 +63,10 @@ public final class SliceGeometry {
                 boolean inside = above ? input[current + axis] >= boundary : input[current + axis] <= boundary;
                 if (inside != previousInside) {
                     float t = (boundary - input[previous + axis]) / (input[current + axis] - input[previous + axis]);
+                    // A non-finite parameter can only come from a degenerate or non-finite distance.
+                    // Snapping to the previous vertex keeps the polygon finite instead of writing NaN
+                    // positions, which the GPU drops together with the whole primitive.
+                    if (!Float.isFinite(t)) t = 0.0F;
                     for (int i = 0; i < stride; i++) output[emitted * stride + i] = input[previous + i] + t * (input[current + i] - input[previous + i]);
                     output[emitted++ * stride + axis] = boundary;
                 }

@@ -27,6 +27,18 @@ public final class CanStorage {
         CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> tag.remove(CanContents.KEY));
     }
 
+    public static CompoundTag compound(ItemStack stack, String key) {
+        return stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag().getCompound(key);
+    }
+
+    public static void put(ItemStack stack, String key, CompoundTag value) {
+        CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> tag.put(key, value.copy()));
+    }
+
+    public static void remove(ItemStack stack, String key) {
+        CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> tag.remove(key));
+    }
+
     public static String text(StringTag tag) {
         return tag.getAsString();
     }

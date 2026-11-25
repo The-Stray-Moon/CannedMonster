@@ -23,6 +23,13 @@ public final class MonsterCanItem extends BaseCanItem {
 
     @Override
     public InteractionResult use(Level level, Player player, InteractionHand hand) {
+        ItemStack stack = player.getItemInHand(hand);
+        if (storesMobs() && storesFusion() && player.isShiftKeyDown() && CanContents.valid(stack)) {
+            if (level.isClientSide()) return InteractionResult.SUCCESS;
+            return player instanceof net.minecraft.server.level.ServerPlayer server
+                    && cc.sighs.cannedmonster.fusion.visual.VisualEditorServer.openHeld(server, hand)
+                    ? InteractionResult.SUCCESS : InteractionResult.PASS;
+        }
         return beginUse(level, player, hand) ? InteractionResult.CONSUME : InteractionResult.PASS;
     }
 

@@ -5,6 +5,7 @@ import cc.sighs.cannedmonster.platform.TagAccess;
 import cc.sighs.cannedmonster.platform.CanStorage;
 import cc.sighs.cannedmonster.platform.EntityStorage;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.world.item.ItemStack;
 
@@ -16,6 +17,11 @@ import java.util.UUID;
 public final class CanContents {
     public static final String KEY = "cannedmonster:contents";
     public static final int MAX_BYTES = 262144;
+    public static final int MAX_SPACE_PREVIEWS = 4;
+    public static final int MAX_SPACE_PREVIEW_ENTRY_BYTES = 16384;
+    public static final int MAX_SPACE_PREVIEW_BYTES = 65536;
+    private static final String SPACE_PREVIEW = "Preview";
+    private static final String SPACE_PREVIEW_REVISION = "PreviewRevision";
 
     private CanContents() {}
 
@@ -59,12 +65,72 @@ public final class CanContents {
     }
 
     public static void storeSpace(ItemStack stack, UUID space, int residents) {
+        storeSpace(stack, space, residents, new ListTag(), 0L);
+    }
+
+    /**
+     * Persists a bounded snapshot of the actual residents so the client can preview them without
+     * a live space session. Entries are kept in caller order (LIFO from the live space); an entry
+     * that is malformed or exceeds the byte budget becomes an empty placeholder instead of being
+     * dropped, so the carousel never shifts and shows a different resident under the same label.
+     */
+    public static void storeSpace(ItemStack stack, UUID space, int residents, ListTag preview, long revision) {
         CompoundTag contents = new CompoundTag();
         contents.putInt("Version", 1);
         contents.putString("Space", space.toString());
         contents.putInt("Count", Math.max(0, residents));
+        ListTag bounded = boundedPreview(preview);
+        if (!bounded.isEmpty()) contents.put(SPACE_PREVIEW, bounded);
+        contents.putString(SPACE_PREVIEW_REVISION, Long.toString(revision));
         validate(contents, 0);
         write(stack, contents);
+    }
+
+    public static ListTag spacePreview(ItemStack stack) {
+        return EntityStorage.list(CanStorage.read(stack), SPACE_PREVIEW).copy();
+    }
+
+    public static int spacePreviewCount(ItemStack stack) {
+        return Math.min(EntityStorage.list(CanStorage.read(stack), SPACE_PREVIEW).size(), MAX_SPACE_PREVIEWS);
+    }
+
+    public static long spacePreviewRevision(ItemStack stack) {
+        return parseRevision(EntityStorage.string(CanStorage.read(stack), SPACE_PREVIEW_REVISION));
+    }
+
+    static ListTag boundedPreview(ListTag preview) {
+        ListTag bounded = new ListTag();
+        if (preview == null || preview.isEmpty()) return bounded;
+        int bytes = 0;
+        for (int i = 0; i < preview.size() && bounded.size() < MAX_SPACE_PREVIEWS; i++) {
+            if (!(preview.get(i) instanceof CompoundTag entry)
+                    || entry.sizeInBytes() > MAX_SPACE_PREVIEW_ENTRY_BYTES) {
+                bounded.add(new CompoundTag());
+                continue;
+            }
+            CompoundTag copy = SpacePreviewData.resident(entry);
+            if (EntityStorage.string(copy, "id").isEmpty()) {
+                bounded.add(new CompoundTag());
+                continue;
+            }
+            int size = copy.sizeInBytes();
+            if (size > MAX_SPACE_PREVIEW_ENTRY_BYTES || bytes + size > MAX_SPACE_PREVIEW_BYTES) {
+                bounded.add(new CompoundTag());
+                continue;
+            }
+            bytes += size;
+            bounded.add(copy);
+        }
+        return bounded;
+    }
+
+    private static long parseRevision(String raw) {
+        if (raw.isEmpty()) return 0L;
+        try {
+            return Long.parseLong(raw);
+        } catch (NumberFormatException invalid) {
+            return 0L;
+        }
     }
 
     public static void store(ItemStack stack, CompoundTag entity, String name) {
@@ -94,6 +160,20 @@ public final class CanContents {
 
     public static void write(ItemStack stack, CompoundTag contents) {
         CanStorage.write(stack, contents);
+    }
+
+    /**
+     * Replaces only the stored entity tag while preserving the can wrapper (version, name, count).
+     * Used by the editor to embed an individual layout inside {@code Entity}.
+     */
+    public static boolean replaceEntity(ItemStack stack, CompoundTag entity) {
+        CompoundTag contents = CanStorage.read(stack);
+        if (contents.isEmpty() || !contents.contains("Entity")) return false;
+        CompoundTag updated = contents.copy();
+        updated.put("Entity", entity.copy());
+        validate(updated, 0);
+        write(stack, updated);
+        return true;
     }
 
     static void validate(net.minecraft.nbt.Tag tag, int depth) {

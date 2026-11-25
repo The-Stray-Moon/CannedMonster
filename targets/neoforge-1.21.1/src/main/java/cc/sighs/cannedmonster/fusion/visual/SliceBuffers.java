@@ -10,17 +10,21 @@ import org.joml.Matrix4f;
 import java.util.*;
 
 public final class SliceBuffers implements MultiBufferSource {
-    private static final int STRIDE = 17;
+    private static final int STRIDE = 18;
+    private static final int LOWER_AXIS = 16;
+    private static final int UPPER_AXIS = 17;
     private static final Set<VertexFormat.Mode> WARNED = EnumSet.noneOf(VertexFormat.Mode.class);
     private final Map<RenderType, Capture> buffers = new LinkedHashMap<>();
     private final Matrix4f inverse = new Matrix4f();
     private final SliceGeometry.Workspace clipping = new SliceGeometry.Workspace(STRIDE);
-    private float lower;
-    private float upper;
+    private VisualGeometry.Cut lower = VisualGeometry.Cut.unbounded();
+    private VisualGeometry.Cut upper = VisualGeometry.Cut.unbounded();
 
-    public SliceBuffers(Matrix4f inverse, float lower, float upper) { reset(inverse, lower, upper); }
+    public SliceBuffers(Matrix4f inverse, VisualGeometry.Cut lower, VisualGeometry.Cut upper) {
+        reset(inverse, lower, upper);
+    }
 
-    public void reset(Matrix4f inverse, float lower, float upper) {
+    public void reset(Matrix4f inverse, VisualGeometry.Cut lower, VisualGeometry.Cut upper) {
         this.inverse.set(inverse);
         this.lower = lower;
         this.upper = upper;
@@ -44,7 +48,7 @@ public final class SliceBuffers implements MultiBufferSource {
             int size = mode == VertexFormat.Mode.QUADS ? 4 : 3;
             VertexConsumer out = null;
             for (int offset = 0; offset + size <= capture.count; offset += size) {
-                int count = clipping.clip(capture.vertices, offset * STRIDE, size, 16, lower, upper);
+                int count = clipping.clipBand(capture.vertices, offset * STRIDE, size, LOWER_AXIS, UPPER_AXIS);
                 if (count < 3) continue;
                 float[] polygon = clipping.vertices();
                 if (out == null) out = destination.getBuffer(entry.getKey());
@@ -85,7 +89,11 @@ public final class SliceBuffers implements MultiBufferSource {
             vertices[current + 1] = y;
             vertices[current + 2] = z;
             Arrays.fill(vertices, current + 3, current + 7, 255);
-            vertices[current + 16] = inverse.m01() * x + inverse.m11() * y + inverse.m21() * z + inverse.m31();
+            float localX = inverse.m00() * x + inverse.m10() * y + inverse.m20() * z + inverse.m30();
+            float localY = inverse.m01() * x + inverse.m11() * y + inverse.m21() * z + inverse.m31();
+            float localZ = inverse.m02() * x + inverse.m12() * y + inverse.m22() * z + inverse.m32();
+            vertices[current + LOWER_AXIS] = lower.distance(localX, localY, localZ);
+            vertices[current + UPPER_AXIS] = upper.distance(localX, localY, localZ);
             return this;
         }
 

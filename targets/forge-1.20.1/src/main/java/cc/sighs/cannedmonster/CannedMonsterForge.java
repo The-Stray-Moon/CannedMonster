@@ -48,8 +48,18 @@ public final class CannedMonsterForge {
         FusionNetwork.register();
         IEventBus bus = MinecraftForge.EVENT_BUS;
         bus.addListener((TickEvent.LevelTickEvent event) -> levelTick(event));
+        bus.addListener((TickEvent.ServerTickEvent event) -> {
+            if (event.phase == TickEvent.Phase.END) {
+                cc.sighs.cannedmonster.fusion.visual.VisualEditorServer.tick(event.getServer());
+            }
+        });
         bus.addListener((PlayerEvent.Clone event) -> clone(event));
         bus.addListener((PlayerEvent.PlayerChangedDimensionEvent event) -> dimension(event));
+        bus.addListener((PlayerEvent.PlayerLoggedOutEvent event) -> {
+            if (event.getEntity() instanceof ServerPlayer player) {
+                cc.sighs.cannedmonster.fusion.visual.VisualEditorServer.left(player);
+            }
+        });
         bus.addListener((PlayerEvent.StartTracking event) -> tracking(event));
         bus.addListener((EntityLeaveLevelEvent event) -> leave(event));
         bus.addListener((PlayerInteractEvent.EntityInteract event) -> canInteraction(event));
@@ -95,6 +105,8 @@ public final class CannedMonsterForge {
         FusionRuntime.clear();
         AppearanceSync.stop();
         RidingSync.clear();
+        cc.sighs.cannedmonster.fusion.visual.VisualEditorServer.stop();
+        cc.sighs.cannedmonster.fusion.visual.VisualDefaults.clear();
     }
 
     private void canInteraction(PlayerInteractEvent.EntityInteract event) {
