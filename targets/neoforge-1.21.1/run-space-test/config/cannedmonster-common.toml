@@ -1,4 +1,0 @@
-#Flying fusion behaviour
-[flight]
-	#Mobs treated as flying in addition to the structural check.
-	extra_flying_mobs = ["minecraft:vex", "minecraft:bat", "minecraft:ender_dragon"]
